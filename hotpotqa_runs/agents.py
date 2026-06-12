@@ -2,22 +2,28 @@ import re, string, os
 from typing import List, Union, Literal
 from enum import Enum
 import tiktoken
+
 from langchain import OpenAI, Wikipedia
-from langchain.llms.base import BaseLLM
-from langchain.chat_models import ChatOpenAI
-from langchain.chat_models.base import BaseChatModel
-from langchain.schema import (
-    SystemMessage,
-    HumanMessage,
-    AIMessage,
-)
-from langchain.agents.react.base import DocstoreExplorer
+# from langchain.llms.base import BaseLLM
+# from langchain.chat_models import ChatOpenAI
+# from langchain.chat_models.base import BaseChatModel
+# from langchain.schema import (
+#     SystemMessage,
+#     HumanMessage,
+#     AIMessage,
+# )
+# from langchain.agents.react.base import DocstoreExplorer
 from langchain.docstore.base import Docstore
 from langchain.prompts import PromptTemplate
+
 from llm import AnyOpenAILLM
 from prompts import reflect_prompt, react_agent_prompt, react_reflect_agent_prompt, REFLECTION_HEADER, LAST_TRIAL_HEADER, REFLECTION_AFTER_LAST_TRIAL_HEADER
 from prompts import cot_agent_prompt, cot_reflect_agent_prompt, cot_reflect_prompt, COT_INSTRUCTION, COT_REFLECT_INSTRUCTION
 from fewshots import WEBTHINK_SIMPLE6, REFLECTIONS, COT, COT_REFLECT
+
+BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 
 class ReflexionStrategy(Enum):
@@ -45,15 +51,17 @@ class CoTAgent:
                     self_reflect_llm: AnyOpenAILLM = AnyOpenAILLM(
                                             temperature=0,
                                             max_tokens=250,
-                                            model_name="gpt-3.5-turbo",
+                                            model_name=DEFAULT_MODEL,
                                             model_kwargs={"stop": "\n"},
-                                            openai_api_key=os.environ['OPENAI_API_KEY']),
+                                            openai_api_key=API_KEY,
+                                            openai_api_base=BASE_URL),
                     action_llm: AnyOpenAILLM = AnyOpenAILLM(
                                             temperature=0,
                                             max_tokens=250,
-                                            model_name="gpt-3.5-turbo",
+                                            model_name=DEFAULT_MODEL,
                                             model_kwargs={"stop": "\n"},
-                                            openai_api_key=os.environ['OPENAI_API_KEY']),
+                                            openai_api_key=API_KEY,
+                                            openai_api_base=BASE_URL),
                     ) -> None:
         self.question = question
         self.context = context
@@ -162,9 +170,10 @@ class ReactAgent:
                  react_llm: AnyOpenAILLM = AnyOpenAILLM(
                                             temperature=0,
                                             max_tokens=100,
-                                            model_name="gpt-3.5-turbo",
+                                            model_name=DEFAULT_MODEL,
                                             model_kwargs={"stop": "\n"},
-                                            openai_api_key=os.environ['OPENAI_API_KEY']),
+                                            openai_api_key=API_KEY,
+                                            openai_api_base=BASE_URL),
                  ) -> None:
         
         self.question = question
@@ -174,7 +183,7 @@ class ReactAgent:
         self.agent_prompt = agent_prompt
         self.react_examples = WEBTHINK_SIMPLE6
 
-        self.docstore = DocstoreExplorer(docstore) # Search, Lookup
+        self.docstore = docstore  # Search, Lookup
         self.llm = react_llm
         
         self.enc = tiktoken.encoding_for_model("text-davinci-003")
@@ -269,17 +278,19 @@ class ReactReflectAgent(ReactAgent):
                  agent_prompt: PromptTemplate = react_reflect_agent_prompt,
                  reflect_prompt: PromptTemplate = reflect_prompt,
                  docstore: Docstore = Wikipedia(),
-                 react_llm: AnyOpenAILLM = AnyOpenAILLM(
+                                 react_llm: AnyOpenAILLM = AnyOpenAILLM(
                                              temperature=0,
                                              max_tokens=100,
-                                             model_name="gpt-3.5-turbo",
+                                                                                         model_name=DEFAULT_MODEL,
                                              model_kwargs={"stop": "\n"},
-                                             openai_api_key=os.environ['OPENAI_API_KEY']),
+                                                                                         openai_api_key=API_KEY,
+                                                                                         openai_api_base=BASE_URL),
                  reflect_llm: AnyOpenAILLM = AnyOpenAILLM(
                                                temperature=0,
                                                max_tokens=250,
-                                               model_name="gpt-3.5-turbo",
-                                               openai_api_key=os.environ['OPENAI_API_KEY']),
+                                                                                             model_name=DEFAULT_MODEL,
+                                                                                             openai_api_key=API_KEY,
+                                                                                             openai_api_base=BASE_URL),
                  ) -> None:
         
         super().__init__(question, key, max_steps, agent_prompt, docstore, react_llm)
@@ -343,7 +354,7 @@ def parse_action(string):
         return action_type, argument
     
     else:
-        return None
+        return None, None
 
 def format_step(step: str) -> str:
     return step.strip('\n').strip().replace('\n', '')

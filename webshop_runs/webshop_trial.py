@@ -1,6 +1,6 @@
 import os
 import sys
-import openai
+from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import Comment
@@ -8,7 +8,10 @@ from env_history import EnvironmentHistory
 
 from typing import Any, Dict, List, Tuple
  
-openai.api_key = os.environ["OPENAI_API_KEY"]
+BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 WEBSHOP_URL = "http://3.83.245.205:3000"
 ACTION_TO_TEMPLATE = {
@@ -24,20 +27,17 @@ def llm(prompt, stop=["\n"]):
     try:
         cur_try = 0
         while cur_try < 6:
-            response = openai.Completion.create(
-              model="text-davinci-002",
-              prompt=prompt,
-              temperature=cur_try * 0.2,
-              max_tokens=100,
-              top_p=1,
-              frequency_penalty=0.0,
-              presence_penalty=0.0,
-              stop=stop
+            response = client.chat.completions.create(
+                model=DEFAULT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=cur_try * 0.2,
+                max_tokens=100,
+                stop=stop,
             )
-            text = response["choices"][0]["text"]
+            text = response.choices[0].message.content
             # dumb way to do this
             if len(text.strip()) >= 5:
-                return response["choices"][0]["text"]
+                return text
             cur_try += 1
         return ""
     except Exception as e:

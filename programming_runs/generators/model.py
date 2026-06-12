@@ -1,4 +1,5 @@
 from typing import List, Union, Optional, Literal
+import os
 import dataclasses
 
 from tenacity import (
@@ -6,9 +7,14 @@ from tenacity import (
     stop_after_attempt,  # type: ignore
     wait_random_exponential,  # type: ignore
 )
-import openai
+from openai import OpenAI
 
 MessageRole = Literal["system", "user", "assistant"]
+
+BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 
 @dataclasses.dataclass()
@@ -34,21 +40,18 @@ def gpt_completion(
         temperature: float = 0.0,
         num_comps=1,
 ) -> Union[List[str], str]:
-    response = openai.Completion.create(
-        model=model,
-        prompt=prompt,
+    response = client.chat.completions.create(
+        model=model or DEFAULT_MODEL,
+        messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         max_tokens=max_tokens,
-        top_p=1,
-        frequency_penalty=0.0,
-        presence_penalty=0.0,
         stop=stop_strs,
         n=num_comps,
     )
     if num_comps == 1:
-        return response.choices[0].text  # type: ignore
+        return response.choices[0].message.content  # type: ignore
 
-    return [choice.text for choice in response.choices]  # type: ignore
+    return [choice.message.content for choice in response.choices]  # type: ignore
 
 
 @retry(wait=wait_random_exponential(min=1, max=180), stop=stop_after_attempt(6))
@@ -59,8 +62,8 @@ def gpt_chat(
     temperature: float = 0.0,
     num_comps=1,
 ) -> Union[List[str], str]:
-    response = openai.ChatCompletion.create(
-        model=model,
+    response = client.chat.completions.create(
+        model=model or DEFAULT_MODEL,
         messages=[dataclasses.asdict(message) for message in messages],
         max_tokens=max_tokens,
         temperature=temperature,

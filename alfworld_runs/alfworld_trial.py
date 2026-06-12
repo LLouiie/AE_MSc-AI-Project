@@ -4,7 +4,6 @@ import os
 import sys
 import json
 import yaml
-import openai
 import importlib
 import alfworld
 import alfworld.agents.environment
@@ -13,7 +12,6 @@ from env_history import EnvironmentHistory
 
 from typing import List, Dict, Any, Tuple
  
-openai.api_key = os.environ["OPENAI_API_KEY"]
 FOLDER = './prompts'
 PROMPT_FILE = 'alfworld_3prompts.json'
 with open(os.path.join(FOLDER, PROMPT_FILE), 'r') as f:

@@ -13,6 +13,9 @@ from prompts import reflect_prompt, react_agent_prompt, react_reflect_agent_prom
 from fewshots import WEBTHINK_SIMPLE6, REFLECTIONS
 
 dotenv.load_dotenv()
+BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 class ReactAgent:
     """
@@ -25,9 +28,10 @@ class ReactAgent:
                  react_llm: BaseLLM = OpenAI(
                                              temperature=0,
                                              max_tokens=100,
-                                             model_name="text-davinci-003",
+                                             model_name=DEFAULT_MODEL,
                                              model_kwargs={"stop": "\n"},
-                                             openai_api_key=os.environ['OPENAI_API_KEY']),
+                                             openai_api_key=API_KEY,
+                                             openai_api_base=BASE_URL),
                  ) -> None:
         
         self.question = question
@@ -104,14 +108,16 @@ class ReactReflectAgent(ReactAgent):
                  react_llm: BaseLLM = OpenAI(
                                              temperature=0,
                                              max_tokens=100,
-                                             model_name="text-davinci-003",
+                                                                                         model_name=DEFAULT_MODEL,
                                              model_kwargs={"stop": "\n"},
-                                             openai_api_key=os.environ['OPENAI_API_KEY']),
+                                                                                         openai_api_key=API_KEY,
+                                                                                         openai_api_base=BASE_URL),
                  reflect_llm: BaseLLM = OpenAI(
                                                temperature=0,
                                                max_tokens=250,
-                                               model_name="text-davinci-003",
-                                               openai_api_key=os.environ['OPENAI_API_KEY']),
+                                                                                             model_name=DEFAULT_MODEL,
+                                                                                             openai_api_key=API_KEY,
+                                                                                             openai_api_base=BASE_URL),
                  ) -> None:
         
         super().__init__(question, env, agent_prompt, react_llm)

@@ -18,7 +18,7 @@ RUN_DIR = os.path.join("runs", args.run_name)
 os.makedirs(RUN_DIR, exist_ok=True)
 LOG = os.path.join(RUN_DIR, "practice_log.jsonl")
 MODEL = "Qwen/Qwen2.5-32B-Instruct"
-BASE_URL = "http://localhost:8001/v1"
+BASE_URL = "http://localhost:8000/v1"
 
 # ---- config 留档: 一个 run 一份完整配置 ----
 commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
@@ -55,9 +55,8 @@ with open(LOG, "a") as fout:
                                       sentences=list(ex["context"]["sentences"]))
         agent = ReactReflectAgent(question=ex["question"], key=ex["answer"],
                                   max_steps=6, docstore=docstore,
-                                  react_llm=react_llm, reflect_llm=reflect_llm)
-        # TODO(明天): rules 注入 — pool.render() 进 agent 的 system prompt,
-        # 需要改 agents.py 的 prompt 模板, 接口定在这里
+                                  react_llm=react_llm, reflect_llm=reflect_llm,
+                                  rules_text=pool.render())
         c0 = llm.call_counter
         t0 = time.time()
         for trial in range(args.max_trials):

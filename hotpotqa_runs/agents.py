@@ -17,7 +17,7 @@ from langchain.docstore.base import Docstore
 from langchain.prompts import PromptTemplate
 
 from llm import AnyOpenAILLM
-from prompts import reflect_prompt, react_agent_prompt, react_reflect_agent_prompt, REFLECTION_HEADER, LAST_TRIAL_HEADER, REFLECTION_AFTER_LAST_TRIAL_HEADER
+from prompts import reflect_prompt, react_agent_prompt, react_reflect_agent_prompt, REFLECTION_HEADER, LAST_TRIAL_HEADER, REFLECTION_AFTER_LAST_TRIAL_HEADER, RULES_HEADER
 from prompts import cot_agent_prompt, cot_reflect_agent_prompt, cot_reflect_prompt, COT_INSTRUCTION, COT_REFLECT_INSTRUCTION
 from fewshots import WEBTHINK_SIMPLE6, REFLECTIONS, COT, COT_REFLECT
 
@@ -174,18 +174,20 @@ class ReactAgent:
                                             model_kwargs={"stop": "\n"},
                                             openai_api_key=API_KEY,
                                             openai_api_base=BASE_URL),
+                 rules_text: str = '',
                  ) -> None:
-        
+
         self.question = question
         self.answer = ''
         self.key = key
         self.max_steps = max_steps
         self.agent_prompt = agent_prompt
         self.react_examples = WEBTHINK_SIMPLE6
+        self.rules_text = rules_text
 
         self.docstore = docstore  # Search, Lookup
         self.llm = react_llm
-        
+
         self.enc = tiktoken.encoding_for_model("text-davinci-003")
 
         self.__reset_agent()
@@ -245,10 +247,16 @@ class ReactAgent:
 
     def prompt_agent(self) -> str:
         return format_step(self.llm(self._build_agent_prompt()))
-    
+
+    def format_rules(self) -> str:
+        if not self.rules_text:
+            return ''
+        return RULES_HEADER + self.rules_text + '\n'
+
     def _build_agent_prompt(self) -> str:
         return self.agent_prompt.format(
                             examples = self.react_examples,
+                            rules = self.format_rules(),
                             question = self.question,
                             scratchpad = self.scratchpad)
     
@@ -291,9 +299,11 @@ class ReactReflectAgent(ReactAgent):
                                                                                              model_name=DEFAULT_MODEL,
                                                                                              openai_api_key=API_KEY,
                                                                                              openai_api_base=BASE_URL),
+                 rules_text: str = '',
                  ) -> None:
-        
-        super().__init__(question, key, max_steps, agent_prompt, docstore, react_llm)
+
+        super().__init__(question, key, max_steps, agent_prompt, docstore, react_llm,
+                         rules_text=rules_text)
         self.reflect_llm = reflect_llm
         self.reflect_prompt = reflect_prompt
         self.reflect_examples = REFLECTIONS
@@ -336,6 +346,7 @@ class ReactReflectAgent(ReactAgent):
     def _build_agent_prompt(self) -> str:
         return self.agent_prompt.format(
                             examples = self.react_examples,
+                            rules = self.format_rules(),
                             reflections = self.reflections_str,
                             question = self.question,
                             scratchpad = self.scratchpad)

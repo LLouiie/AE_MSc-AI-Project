@@ -87,7 +87,7 @@ cot_simple_reflect_prompt = PromptTemplate(
                         )
 
 
-REACT_INSTRUCTION = """Solve a question answering task with interleaving Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be three types: 
+REACT_INSTRUCTION = """Solve a question answering task with interleaving Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be three types:
 (1) Search[entity], which searches the exact entity on Wikipedia and returns the first paragraph if it exists. If not, it will return some similar entities to search.
 (2) Lookup[keyword], which returns the next sentence containing keyword in the last passage successfully found by Search.
 (3) Finish[answer], which returns the answer and finishes the task.
@@ -95,9 +95,9 @@ You may take as many steps as necessary.
 Here are some examples:
 {examples}
 (END OF EXAMPLES)
-Question: {question}{scratchpad}"""
+{rules}Question: {question}{scratchpad}"""
 
-REACT_REFLECT_INSTRUCTION = """Solve a question answering task with interleaving Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be three types: 
+REACT_REFLECT_INSTRUCTION = """Solve a question answering task with interleaving Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be three types:
 (1) Search[entity], which searches the exact entity on Wikipedia and returns the first paragraph if it exists. If not, it will return some similar entities to search.
 (2) Lookup[keyword], which returns the next sentence containing keyword in the last passage successfully found by Search.
 (3) Finish[answer], which returns the answer and finishes the task.
@@ -106,11 +106,12 @@ Here are some examples:
 {examples}
 (END OF EXAMPLES)
 
-{reflections}
+{rules}{reflections}
 
 Question: {question}{scratchpad}"""
 
 REFLECTION_HEADER = 'You have attempted to answer following question before and failed. The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
+RULES_HEADER = 'The following are some experience you gather on a similar task of question answering using Wikipedia API. Use these as references to help you perform this task:\n'
 REFLECTION_AFTER_LAST_TRIAL_HEADER = 'The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
 LAST_TRIAL_HEADER = 'You have attempted to answer the following question before and failed. Below is the last trial you attempted to answer the question.\n'
 
@@ -124,12 +125,12 @@ Question: {question}{scratchpad}
 Reflection:"""
 
 react_agent_prompt = PromptTemplate(
-                        input_variables=["examples", "question", "scratchpad"],
+                        input_variables=["examples", "rules", "question", "scratchpad"],
                         template = REACT_INSTRUCTION,
                         )
 
 react_reflect_agent_prompt = PromptTemplate(
-                        input_variables=["examples", "reflections", "question", "scratchpad"],
+                        input_variables=["examples", "rules", "reflections", "question", "scratchpad"],
                         template = REACT_REFLECT_INSTRUCTION,
                         )
 

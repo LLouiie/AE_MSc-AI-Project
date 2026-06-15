@@ -1,0 +1,11 @@
+{
+  "sequence": "/rds/general/user/jy625/home/projects/AE/data/hotpotqa/splits/practice_random_s42.json",
+  "scheduler": "fixed:10",
+  "max_trials": 6,
+  "run_name": "smoke_fixed10",
+  "limit": 20,
+  "model": "Qwen/Qwen2.5-32B-Instruct",
+  "max_steps": 6,
+  "git_commit": "fb83ef7",
+  "started": "2026-06-15 20:28:40"
+}

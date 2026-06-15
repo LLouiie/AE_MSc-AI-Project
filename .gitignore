@@ -133,4 +133,7 @@ scratch/
 scratch/
 .vscode/
 
-.DS_Store/
+.DS_Store/runs/
+*.log
+__pycache__/
+*.pyc

@@ -175,6 +175,7 @@ class ReactAgent:
                                             openai_api_key=API_KEY,
                                             openai_api_base=BASE_URL),
                  rules_text: str = '',
+                 online_feedback: bool = True,
                  ) -> None:
 
         self.question = question
@@ -184,6 +185,7 @@ class ReactAgent:
         self.agent_prompt = agent_prompt
         self.react_examples = WEBTHINK_SIMPLE6
         self.rules_text = rules_text
+        self.online_feedback = online_feedback
 
         self.docstore = docstore  # Search, Lookup
         self.llm = react_llm
@@ -217,10 +219,11 @@ class ReactAgent:
         
         if action_type == 'Finish':
             self.answer = argument
-            if self.is_correct():
-                self.scratchpad += 'Answer is CORRECT'
-            else: 
-                self.scratchpad += 'Answer is INCORRECT'
+            if self.online_feedback:
+                if self.is_correct():
+                    self.scratchpad += 'Answer is CORRECT'
+                else:
+                    self.scratchpad += 'Answer is INCORRECT'
             self.finished = True
             self.step_n += 1
             return
@@ -300,10 +303,11 @@ class ReactReflectAgent(ReactAgent):
                                                                                              openai_api_key=API_KEY,
                                                                                              openai_api_base=BASE_URL),
                  rules_text: str = '',
+                 online_feedback: bool = True,
                  ) -> None:
 
         super().__init__(question, key, max_steps, agent_prompt, docstore, react_llm,
-                         rules_text=rules_text)
+                         rules_text=rules_text, online_feedback=online_feedback)
         self.reflect_llm = reflect_llm
         self.reflect_prompt = reflect_prompt
         self.reflect_examples = REFLECTIONS

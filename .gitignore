@@ -133,7 +133,13 @@ scratch/
 scratch/
 .vscode/
 
-.DS_Store/runs/
+.DS_Store
+runs/
 *.log
 __pycache__/
 *.pyc
+
+# Generated analysis artifacts (produced by analysis/trajectory_analysis.py)
+hotpotqa_runs/analysis/report.md
+hotpotqa_runs/analysis/step_features.csv
+hotpotqa_runs/smoke_inspect.txt

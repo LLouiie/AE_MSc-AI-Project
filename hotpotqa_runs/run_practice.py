@@ -59,11 +59,18 @@ with open(LOG, "a") as fout:
                                   rules_text=pool.render())
         c0 = llm.call_counter
         t0 = time.time()
+        trial_records = []
         for trial in range(args.max_trials):
             agent.run(reset=True, reflect_strategy=ReflexionStrategy.REFLEXION)
+            trial_records.append({
+                "trial": trial + 1,
+                "em": int(agent.is_correct()),
+                "trajectory": getattr(agent, "scratchpad", ""),
+                "answer": agent.answer,
+            })
             if agent.is_correct():
                 break
-        traj_text = getattr(agent, "scratchpad", "")   # 完整 ReAct 轨迹
+        traj_text = trial_records[-1]["trajectory"]   # 最后一轮的 ReAct 轨迹
         pending_traj.append(traj_text)
 
         state = {"q_index": qi, "em": int(agent.is_correct()),
@@ -81,6 +88,7 @@ with open(LOG, "a") as fout:
             "wall_s": round(time.time() - t0, 1),
             "reflections": list(agent.reflections),
             "trajectory": traj_text,
+            "trial_records": trial_records,
             "decision": decision, "rules_size": len(pool.rules),
         }, ensure_ascii=False) + "\n")
         fout.flush()

@@ -1,4 +1,17 @@
-from langchain.prompts import PromptTemplate
+class PromptTemplate:
+    """Minimal drop-in replacement for langchain.prompts.PromptTemplate.
+
+    Every call site here only ever does .format(**kwargs) against a plain
+    str.format-style template, which is exactly what langchain's
+    PromptTemplate did under the hood for these (non-partial, non-chat)
+    templates — so no prompt text or .format() semantics change.
+    """
+    def __init__(self, template: str, input_variables=None):
+        self.template = template
+        self.input_variables = input_variables or []
+
+    def format(self, **kwargs) -> str:
+        return self.template.format(**kwargs)
 
 COT_INSTRUCTION = """Solve a question answering task by having a Thought, then Finish with your answer. Thought can reason about the current situation. Finish[answer] returns the answer and finishes the task. You will be given context that you should use to help you answer the question.
 Here are some examples:

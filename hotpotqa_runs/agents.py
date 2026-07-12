@@ -1,25 +1,21 @@
 import re, string, os
-from typing import List, Union, Literal
+from typing import List, Union, Literal, Protocol
 from enum import Enum
 import tiktoken
 
-from langchain import OpenAI, Wikipedia
-# from langchain.llms.base import BaseLLM
-# from langchain.chat_models import ChatOpenAI
-# from langchain.chat_models.base import BaseChatModel
-# from langchain.schema import (
-#     SystemMessage,
-#     HumanMessage,
-#     AIMessage,
-# )
-# from langchain.agents.react.base import DocstoreExplorer
-from langchain.docstore.base import Docstore
-from langchain.prompts import PromptTemplate
-
 from llm import AnyOpenAILLM
-from prompts import reflect_prompt, react_agent_prompt, react_reflect_agent_prompt, REFLECTION_HEADER, LAST_TRIAL_HEADER, REFLECTION_AFTER_LAST_TRIAL_HEADER, RULES_HEADER
+from prompts import PromptTemplate, reflect_prompt, react_agent_prompt, react_reflect_agent_prompt, REFLECTION_HEADER, LAST_TRIAL_HEADER, REFLECTION_AFTER_LAST_TRIAL_HEADER, RULES_HEADER
 from prompts import cot_agent_prompt, cot_reflect_agent_prompt, cot_reflect_prompt, COT_INSTRUCTION, COT_REFLECT_INSTRUCTION
 from fewshots import WEBTHINK_SIMPLE6, REFLECTIONS, COT, COT_REFLECT
+
+
+class Docstore(Protocol):
+    """Structural type for the Search/Lookup interface ReactAgent.step() calls.
+    DistractorDocstore and WikipediaDocstore satisfy this without inheriting
+    from anything — this replaces langchain.docstore.base.Docstore, which was
+    only ever used here as a type hint."""
+    def search(self, query: str) -> str: ...
+    def lookup(self, keyword: str) -> str: ...
 
 BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
@@ -166,7 +162,7 @@ class ReactAgent:
                  key: str,
                  max_steps: int = 6,
                  agent_prompt: PromptTemplate = react_agent_prompt,
-                 docstore: Docstore = Wikipedia(),
+                 docstore: Docstore = None,
                  react_llm: AnyOpenAILLM = AnyOpenAILLM(
                                             temperature=0,
                                             max_tokens=100,
@@ -187,6 +183,11 @@ class ReactAgent:
         self.rules_text = rules_text
         self.online_feedback = online_feedback
 
+        if docstore is None:
+            raise ValueError(
+                "docstore must be provided explicitly "
+                "(e.g. WikipediaDocstore or DistractorDocstore)"
+            )
         self.docstore = docstore  # Search, Lookup
         self.llm = react_llm
 
@@ -288,7 +289,7 @@ class ReactReflectAgent(ReactAgent):
                  max_steps: int = 6,
                  agent_prompt: PromptTemplate = react_reflect_agent_prompt,
                  reflect_prompt: PromptTemplate = reflect_prompt,
-                 docstore: Docstore = Wikipedia(),
+                 docstore: Docstore = None,
                                  react_llm: AnyOpenAILLM = AnyOpenAILLM(
                                              temperature=0,
                                              max_tokens=100,

@@ -143,3 +143,7 @@ __pycache__/
 hotpotqa_runs/analysis/report.md
 hotpotqa_runs/analysis/step_features.csv
 hotpotqa_runs/smoke_inspect.txt
+
+# PBS job stdout/stderr logs (jobname.e<id> / jobname.o<id>)
+*.e[0-9]*
+*.o[0-9]*

@@ -1,0 +1,9 @@
+{
+  "source": "/homes/jy625/projects/AE3/data/fever/paper_dev.jsonl",
+  "pool_size": 7405,
+  "seed": 233,
+  "canonical_n": 100,
+  "practice_n": 70,
+  "exam_n": 30,
+  "note": "ExpeL canonical 100 (idxs[:100]) split 70/30 for AE practice/exam protocol"
+}

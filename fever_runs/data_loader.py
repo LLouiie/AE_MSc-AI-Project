@@ -7,17 +7,23 @@ ExpeL uses:
     tasks = [FeverEnv(idx) for idx in idxs[:100]]
 
 We further split those 100 into practice (first 70) and exam (last 30).
-Data file: ~/projects/AE/data/fever/paper_dev.jsonl (9999 rows)
+Data file: data/fever/paper_dev.jsonl (repo root, 9999 rows), or set
+FEVER_DATA_DIR to point elsewhere — the previous hardcoded
+../../AE/data/fever path assumed a sibling `AE` checkout next to this repo,
+which doesn't hold on a fresh clone.
 
 Download: https://fever.ai/dataset/fever.html  (paper_dev.jsonl)
+SHA256 of the known-good paper_dev.jsonl:
+41158707810008747946bf23471e82df53e77a513524b9e3ec1c2e674ef5ef8c
 """
 
 import json
 import random
 import os
 
-DATA_DIR = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'AE', 'data', 'fever'
+DATA_DIR = os.environ.get(
+    "FEVER_DATA_DIR",
+    os.path.join(os.path.dirname(__file__), '..', 'data', 'fever'),
 )
 DEFAULT_DEV = os.path.join(DATA_DIR, 'paper_dev.jsonl')
 SPLITS_DIR  = os.path.join(DATA_DIR, 'splits')

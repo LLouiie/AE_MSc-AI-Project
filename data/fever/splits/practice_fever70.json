@@ -1,0 +1,352 @@
+[
+  {
+    "id": 3687,
+    "question": "Paramore is not from Tennessee.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6238,
+    "question": "Eric Church is a sound mixer.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 5388,
+    "question": "Victoria Palace Theatre is barely in the West End.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 3522,
+    "question": "Civilization IV was hailed as a masterwork of filmmaking.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 3824,
+    "question": "Marnie is a film.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 2866,
+    "question": "Buffy Summers appears only in a television series.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 1551,
+    "question": "Robert Palmer (writer) isn't a journalist.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 2544,
+    "question": "Tijuana is smaller than 3 other cities in Baja California.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 1557,
+    "question": "Folklore includes pratfalls.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 5762,
+    "question": "The Beach is a film with multiple genres.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 7275,
+    "question": "Rick Yune was on an HBO show.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 3188,
+    "question": "The Armenian Genocide occurred during the Reconstruction.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 200,
+    "question": "Martin Van Buren was Secretary of State.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 2825,
+    "question": "The Mirny (sloop-of-war) traveled the globe.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 3543,
+    "question": "Andrew Kevin Walker is from North America.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1320,
+    "question": "Johanna Braddy was in a TV series.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 2811,
+    "question": "The Colosseum is a tourist attraction in Rome.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1885,
+    "question": "Margaret Thatcher implemented laws that have come to be known as Thatcherism.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 4237,
+    "question": "James VI and I was a person.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 7026,
+    "question": "Jackpot is a film.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1720,
+    "question": "Chris Eubank Jr. was an only child.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 1560,
+    "question": "Noel Fisher acted in the role of Cael Malloy.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 4525,
+    "question": "Mary-Kate Olsen and Ashley Olsen are also known as the Olsen twins when referred to collectively.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 2609,
+    "question": "Renato Balestra came from an architect family.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 4506,
+    "question": "Tenacious D was formed in 1942.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 3395,
+    "question": "Sheryl Lee reprised her role of Phoebe Buffay.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 5123,
+    "question": "James VI and I razed the Plantation of UIster.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 5503,
+    "question": "DJ Quik was conceived on January 22nd, 1970.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 807,
+    "question": "CHiPs is based on a TV episode written by Rick Rosner.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 3511,
+    "question": "Luis Fonsi is Chinese.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 3805,
+    "question": "David Spade was fired from being in Black Sheep.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 3265,
+    "question": "Global warming is expected to exacerbate with the retreat of permafrost.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 3618,
+    "question": "Ashton Kutcher is a romantic comedy actor.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 6432,
+    "question": "Larry Wilmore is a singer.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 4679,
+    "question": "Thomas Jefferson retired from a position.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 909,
+    "question": "CHiPs is a film that was made in the United States and categorized as buddy cop.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 851,
+    "question": "Duff McKagan is a Scientologist.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 3446,
+    "question": "Flaked was renewed for a six episode season.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 690,
+    "question": "Tom DeLonge formed Taking Back Sunday.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 4678,
+    "question": "Amyotrophic lateral sclerosis is a disease.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 4152,
+    "question": "Trollhunters was produced by Adam Sandler.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 4739,
+    "question": "Winter's Tale is a romance.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 457,
+    "question": "A monk practices atheistic asceticism.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 2521,
+    "question": "A Milli is a song by a hip hop recording artist.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1534,
+    "question": "The Road to El Dorado stars Jim Cummings.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 5291,
+    "question": "Reign Over Me was not written and directed by Mike Binder.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6102,
+    "question": "The Republic of Macedonia is in The Galactic Empire.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 156,
+    "question": "The human brain contains a hypothalamus.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 4050,
+    "question": "The Penibaetic System is also called a system of mountain ranges.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1439,
+    "question": "Daggering was perfected in Jamaica.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 6916,
+    "question": "Tinker Tailor Soldier Spy stars Jonah Hill.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 7174,
+    "question": "Lemmy was known for his distinct gravelly voice.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 919,
+    "question": "English people are descended from other peoples.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 5679,
+    "question": "A monster is only found in reality.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6709,
+    "question": "Harris Jayaraj is a television composer.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 4330,
+    "question": "Alice Cooper's real name is Vincent Damon Furnier.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 2927,
+    "question": "The Cretaceous is a Paleogene extinction event in 2001.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 2053,
+    "question": "Dilwale Dulhania Le Jayenge began filming in China.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6849,
+    "question": "Riddick is in a documentary.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6414,
+    "question": "The 1974 musical comedy The Sugarland Express was Steven Spielberg's directorial debut.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 6800,
+    "question": "Mary-Kate Olsen and Ashley Olsen are also known as the Olsen twins.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 1129,
+    "question": "Johnny Galecki plays a character with a Ph.D. in How I Met Your Mother.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 1009,
+    "question": "The Closer was an unadapted novel.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 1781,
+    "question": "Girls' Generation covered the song Rhythm Nation.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 7260,
+    "question": "James Earl Jones was not a voice actor in The Lion King.",
+    "answer": "REFUTES"
+  },
+  {
+    "id": 5980,
+    "question": "Eva Green had a career in theatre for eight years.",
+    "answer": "NOT ENOUGH INFO"
+  },
+  {
+    "id": 6696,
+    "question": "Despacito has a version which features a musician.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 3642,
+    "question": "Norman Jewison directed The Cincinnati Kid.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 3594,
+    "question": "The Bassoon King is based in reality.",
+    "answer": "SUPPORTS"
+  },
+  {
+    "id": 4592,
+    "question": "Winter's Tale is a book.",
+    "answer": "SUPPORTS"
+  }
+]

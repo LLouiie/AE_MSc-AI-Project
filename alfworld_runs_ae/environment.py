@@ -2,14 +2,17 @@
 ALFWorld environment wrapper for the AE practice/exam protocol.
 
 Data setup:
-    source ~/miniforge3/etc/profile.d/conda.sh
-    conda activate reflexion_hotpot
-    alfworld-download          # downloads to $ALFWORLD_DATA (default: ~/alfworld_data)
+    pip install alfworld              # or: conda activate reflexion_hotpot
+    export ALFWORLD_DATA=~/alfworld_data
+    alfworld-download                 # downloads to $ALFWORLD_DATA
 
 ExpeL task file (134 solvable valid_unseen tasks):
     Download alfworld_tasks_suffix.json from
     https://github.com/LeapLabTHU/ExpeL/blob/main/data/alfworld/alfworld_tasks_suffix.json
-    and place at ~/projects/AE/data/alfworld/alfworld_tasks_suffix.json
+    and place at data/alfworld/alfworld_tasks_suffix.json (repo root), or
+    point ALFWORLD_TASKS_FILE at wherever it actually lives — the previous
+    hardcoded ../../AE/data/alfworld/... relative path assumed a sibling
+    `AE` checkout next to this repo, which doesn't hold on a fresh clone.
 
 Split: first 100 → practice, last 34 → exam.
 """
@@ -18,8 +21,9 @@ import os, json, yaml, importlib
 import alfworld
 import alfworld.agents.environment
 
-TASKS_FILE = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'AE', 'data', 'alfworld', 'alfworld_tasks_suffix.json'
+TASKS_FILE = os.environ.get(
+    "ALFWORLD_TASKS_FILE",
+    os.path.join(os.path.dirname(__file__), '..', 'data', 'alfworld', 'alfworld_tasks_suffix.json'),
 )
 CONFIG_FILE = os.path.join(
     os.path.dirname(__file__), '..', 'alfworld_runs', 'base_config.yaml'

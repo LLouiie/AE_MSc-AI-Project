@@ -40,14 +40,16 @@ p.add_argument("--max-steps", type=int, default=6,    help="max ReAct steps per 
 p.add_argument("--retrieval", choices=["wikipedia", "distractor"], default="wikipedia",
                help="wikipedia: live MediaWiki API, question-only, ignores ex['context']; "
                     "distractor: local DistractorDocstore built from ex['context']")
+p.add_argument("--model", default=os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-32B-Instruct"))
+p.add_argument("--base-url", default=os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1"))
 args = p.parse_args()
 
 RUN_DIR = os.path.join("runs", args.run_name)
 os.makedirs(RUN_DIR, exist_ok=True)
 LOG            = os.path.join(RUN_DIR, "episode_log.jsonl")
 RETRIEVAL_LOG  = os.path.join(RUN_DIR, "retrieval_log.jsonl")
-MODEL = "Qwen/Qwen2.5-32B-Instruct"
-BASE_URL = "http://localhost:8000/v1"
+MODEL = args.model
+BASE_URL = args.base_url
 DATA_FORMAT = "joblib" if args.data.lower().endswith(".joblib") else "json"
 
 # Fail fast, before any question is processed: no anonymous default User-Agent.
@@ -73,6 +75,16 @@ json.dump({**vars(args), "model": MODEL, "git_commit": commit,
 # ── data ──────────────────────────────────────────────────────────────────────
 if DATA_FORMAT == "joblib":
     import joblib
+    # hotpot-qa-distractor-sample.joblib was pickled by an older pandas that
+    # had pandas.core.indexes.numeric (Int64Index etc.); modern pandas
+    # removed that module, so loading raises ModuleNotFoundError unless we
+    # register a compatibility shim first.
+    import sys, types
+    import pandas as pd
+    _shim = types.ModuleType("pandas.core.indexes.numeric")
+    for _name in ["Int64Index", "UInt64Index", "Float64Index", "NumericIndex"]:
+        setattr(_shim, _name, pd.Index)
+    sys.modules.setdefault("pandas.core.indexes.numeric", _shim)
     questions = joblib.load(args.data)
     if hasattr(questions, "to_dict"):
         questions = questions.to_dict("records")

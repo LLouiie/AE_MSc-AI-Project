@@ -1,4 +1,4 @@
-import re, string, time, requests
+import os, re, string, time, requests
 from typing import List, Optional, Tuple
 
 
@@ -9,7 +9,17 @@ FEVER_LABELS = {"SUPPORTS", "REFUTES", "NOT ENOUGH INFO"}
 class WikiSearchDocstore:
     """Live Wikipedia search via MediaWiki API. No local index needed."""
 
-    def __init__(self):
+    def __init__(self, user_agent: str = ""):
+        # Wikipedia's API now hard-requires a User-Agent header on every
+        # request, otherwise it returns 403 (plain text, not JSON) — which
+        # _fetch_page's bare except-and-retry swallowed and reported as a
+        # normal "page not found", making every search silently fail
+        # regardless of query (confirmed empirically 2026-07-25: "Paramore",
+        # a real, extremely well-known page, came back "Could not find").
+        user_agent = user_agent or os.environ.get("WIKIPEDIA_USER_AGENT", "").strip()
+        if not user_agent:
+            raise ValueError("WikiSearchDocstore requires a non-empty user_agent")
+        self.user_agent = user_agent
         self._last_page_sents: List[str] = []
         self._lookup_idx: int = 0
 
@@ -51,9 +61,10 @@ class WikiSearchDocstore:
             "prop": "extracts", "explaintext": 1,
             "format": "json", "redirects": 1,
         }
+        headers = {"User-Agent": self.user_agent}
         for _ in range(3):
             try:
-                r = requests.get(WIKI_API, params=params, timeout=15)
+                r = requests.get(WIKI_API, params=params, headers=headers, timeout=15)
                 pages = r.json()["query"]["pages"]
                 page = next(iter(pages.values()))
                 if "missing" in page:
@@ -70,9 +81,10 @@ class WikiSearchDocstore:
             "action": "opensearch", "search": query,
             "limit": 5, "format": "json",
         }
+        headers = {"User-Agent": self.user_agent}
         for _ in range(3):
             try:
-                r = requests.get(WIKI_API, params=params, timeout=10)
+                r = requests.get(WIKI_API, params=params, headers=headers, timeout=10)
                 return r.json()[1]
             except Exception:
                 time.sleep(1)

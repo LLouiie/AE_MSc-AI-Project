@@ -22,7 +22,8 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO_ROOT, "alfworld_runs_ae"))
 
 from environment import (  # noqa: E402
-    get_practice_tasks, get_exam_tasks, get_task_type, make_alfworld_env,
+    get_practice_tasks, get_exam_tasks, get_task_type,
+    make_single_task_env, resolve_gamefile,
 )
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -80,7 +81,6 @@ def main():
         print(f"checkpoint: {len(done)} done, resuming")
 
     act_llm, reflect_llm = build_llms(args.model, args.base_url)
-    env = make_alfworld_env()
     logger = JsonlLogger(log_path)
 
     for qi, task in enumerate(tasks, 1):
@@ -96,6 +96,15 @@ def main():
         goal = task["goal"]
         task_type = get_task_type(env_name)
 
+        # One env per task, registered with exactly this task's gamefile
+        # (ExpeL's pattern) — make_alfworld_env's shared batch env cycles
+        # through all 134 games in AlfredTWEnv's own directory-scan order,
+        # which does not match alfworld_tasks_suffix.json's order, so the
+        # goal shown to the agent would not match the room/objects it's
+        # placed in (confirmed empirically 2026-07-25, 3/3 sampled resets
+        # mismatched). This guarantees goal and env always correspond.
+        env = make_single_task_env(resolve_gamefile(task["gamefile"]))
+
         c0 = call_counter()
         t0 = time.time()
 
@@ -108,6 +117,8 @@ def main():
         else:
             raise AssertionError("unreachable")
 
+        env.close()
+
         record = {
             "env_name": env_name, "q_index": qi, "goal": goal,
             "llm_calls": call_counter() - c0,
@@ -119,7 +130,6 @@ def main():
               f"calls={record['llm_calls']} wall_s={record['wall_s']}")
 
     logger.close()
-    env.close()
 
     rows = [json.loads(l) for l in open(log_path)]
     n = len(rows)

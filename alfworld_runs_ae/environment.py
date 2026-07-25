@@ -81,7 +81,17 @@ def _resolve_env_cls(type_name: str):
 
 
 def make_alfworld_env(config_file: str = CONFIG_FILE):
-    """Create and return an ALFWorld AlfredTWEnv batch env (batch_size=1)."""
+    """Create and return an ALFWorld AlfredTWEnv batch env (batch_size=1).
+
+    WARNING: this registers all 134 valid_unseen games at once; each
+    env.reset() advances through AlfredTWEnv's own directory-scan (os.walk)
+    order, which does NOT match alfworld_tasks_suffix.json's order. Calling
+    code that pulls a goal/task_type from the task list while resetting this
+    env will get a goal/room mismatch (confirmed empirically 2026-07-25 —
+    3/3 sampled resets loaded a different game than the task list's row
+    implied). Use make_single_task_env for anything that needs a specific
+    task's env to actually match its goal.
+    """
     importlib.reload(alfworld)
     importlib.reload(alfworld.agents.environment)
     with open(config_file) as f:
@@ -89,6 +99,37 @@ def make_alfworld_env(config_file: str = CONFIG_FILE):
     split = "eval_out_of_distribution"
     env_cls = _resolve_env_cls(config["env"]["type"])
     env = env_cls(config, train_eval=split)
+    return env.init_env(batch_size=1)
+
+
+def resolve_gamefile(relative_gamefile: str) -> str:
+    """alfworld_tasks_suffix.json's `gamefile` field is a path relative to
+    ExpeL's own repo layout (e.g. 'data/alfworld/json_2.1.1/valid_unseen/...'),
+    not a real path on this machine. Reconstruct the real path under
+    $ALFWORLD_DATA by keeping everything from 'valid_unseen/' onward."""
+    alfworld_data = os.environ["ALFWORLD_DATA"]
+    suffix = relative_gamefile.split("valid_unseen/", 1)[1]
+    return os.path.join(alfworld_data, "json_2.1.1", "valid_unseen", suffix)
+
+
+def make_single_task_env(game_file_path: str, config_file: str = CONFIG_FILE):
+    """Create an ALFWorld env that serves exactly one specific game file on
+    every reset(), following ExpeL's per-task env pattern (each task gets
+    its own env registered with only that one gamefile) instead of
+    AlfredTWEnv's default of registering all 134 games and cycling through
+    them in directory-scan order. This is what guarantees the goal text
+    shown to the agent actually matches the room/objects it's placed in.
+    Reuses AlfredTWEnv's own game-collection/filtering logic, just narrows
+    `game_files` to one entry before registration."""
+    importlib.reload(alfworld)
+    importlib.reload(alfworld.agents.environment)
+    with open(config_file) as f:
+        config = yaml.safe_load(f)
+    split = "eval_out_of_distribution"
+    env_cls = _resolve_env_cls(config["env"]["type"])
+    env = env_cls(config, train_eval=split)
+    env.game_files = [game_file_path]
+    env.num_games = 1
     return env.init_env(batch_size=1)
 
 

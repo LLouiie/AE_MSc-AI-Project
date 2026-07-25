@@ -31,9 +31,14 @@ from ae.llm_client import AnyOpenAILLM, call_counter  # noqa: E402
 from ae.logging_utils import snapshot_config, load_done_ids, JsonlLogger  # noqa: E402
 from ae.baselines import react as react_baseline  # noqa: E402
 from ae.baselines import reflexion as reflexion_baseline  # noqa: E402
+from ae.baselines import ae_full as ae_full_baseline  # noqa: E402
+from ae.controllers.config import load_config as load_ae_config  # noqa: E402
 
-IMPLEMENTED_BASELINES = {"react", "reflexion"}
-PLANNED_BASELINES = {"adapt", "reflact", "reflexgrad", "ae"}
+IMPLEMENTED_BASELINES = {"react", "reflexion", "ae_full"}
+# fixed_interval / stateless_trigger / ae_no_hysteresis: interface reserved
+# (see ae/controllers/config.py::AEConfig.mode docstring), not implemented
+# this pass per the task spec ("第一轮优先保证 react 和 ae_full 可运行").
+PLANNED_BASELINES = {"adapt", "reflact", "reflexgrad", "fixed_interval", "stateless_trigger", "ae_no_hysteresis"}
 
 
 def build_llms(model: str, base_url: str):
@@ -55,6 +60,8 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--max-trials", type=int, default=4,
                     help="Reflexion only: max retry trials per task")
+    p.add_argument("--ae-config", default=os.path.join(REPO_ROOT, "configs", "controllers", "ae_full.yaml"),
+                    help="ae_full only: path to AEConfig yaml")
     p.add_argument("--model", default=os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-32B-Instruct"))
     p.add_argument("--base-url", default=os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1"))
     p.add_argument("--output-dir", default=os.path.join(os.path.dirname(__file__), "runs"))
@@ -82,6 +89,7 @@ def main():
 
     act_llm, reflect_llm = build_llms(args.model, args.base_url)
     logger = JsonlLogger(log_path)
+    ae_config = load_ae_config(args.ae_config) if args.baseline == "ae_full" else None
 
     for qi, task in enumerate(tasks, 1):
         # alfworld_tasks_suffix.json rows have {"goal", "gamefile"}, no
@@ -114,6 +122,8 @@ def main():
             result = reflexion_baseline.run_episode(
                 env, goal, task_type, act_llm, reflect_llm, max_trials=args.max_trials
             )
+        elif args.baseline == "ae_full":
+            result = ae_full_baseline.run_episode(env, goal, task_type, act_llm, ae_config)
         else:
             raise AssertionError("unreachable")
 

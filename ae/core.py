@@ -44,6 +44,7 @@ class AppraisalState:
 class InterventionType(Enum):
     CONTINUE = "continue"
     VERIFY = "verify"
+    REFLECT = "reflect"
     REPLAN = "replan"
 
 

@@ -9,6 +9,8 @@
 
 # Usage: sbatch --export=OFFSET=<n>,NUM_ENVS=<n>,RUN_NAME=<name> reflexgrad_segment.slurm
 source /vol/gpudata/jy625-ae-data/ae3-venv/bin/activate
+export TMPDIR=/vol/gpudata/jy625-ae-data/tmp
+mkdir -p "$TMPDIR"
 export ALFWORLD_DATA=/vol/gpudata/jy625-ae-data/alfworld_data
 
 VLLM_NODE=$(cat /vol/gpudata/jy625-ae-data/logs/vllm-qwen3-8b-node.txt | awk '{print $2}')

@@ -9,6 +9,11 @@
 
 # CPU-only driver job: just makes HTTP calls to the vLLM server, no GPU needed here.
 source /vol/gpudata/jy625-ae-data/ae3-venv/bin/activate
+# The shared login node's /tmp filled up (other users' files) and ALFWorld's
+# fast_downward dependency extracts a .so there at import time -> crashed
+# both ALFWorld ReAct runs with ENOSPC on the first attempt (2026-07-25).
+export TMPDIR=/vol/gpudata/jy625-ae-data/tmp
+mkdir -p "$TMPDIR"
 export ALFWORLD_DATA=/vol/gpudata/jy625-ae-data/alfworld_data
 export WIKIPEDIA_USER_AGENT='AE-thesis-project/1.0 (jy625@imperial.ac.uk)'
 

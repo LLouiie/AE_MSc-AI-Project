@@ -2,17 +2,24 @@
 run_episode.py — single-question episode runner.
 
 Each HotpotQA question is treated as an independent episode:
-  - No reflection, no retry, no consolidation, no scheduler, no RulePool.
-  - No inter-episode state (rules / reflections / affect).
-  - online_feedback=False: CORRECT/INCORRECT never written to scratchpad;
-    is_correct() never called during run(); gold never reaches any LLM prompt.
-  - Gold is stored in agent.key but only accessed after run() returns,
-    for offline EM/F1 computation inside this runner.
+  - No consolidation, no scheduler, no RulePool.
+  - --strategy react (default): no reflection/retry, no inter-episode state.
+    online_feedback=False: CORRECT/INCORRECT never written to scratchpad;
+    is_correct() never called during run(); gold never reaches any LLM
+    prompt. Gold is stored in agent.key but only accessed after run()
+    returns, for offline EM/F1 computation inside this runner.
+  - --strategy reflexion: up to --max-trials attempts per question, each
+    failed trial's trajectory reflected on (ReactReflectAgent) before the
+    next retry, matching ae/baselines/reflexion.py's ALFWorld pattern
+    (rules_text pinned to "" so RulePool/consolidation is never imported).
+    Reflexion inherently needs is_correct() mid-run to decide whether to
+    retry, so gold reaches the loop (not the LLM prompt) here.
 
 Usage (from hotpotqa_runs/):
     python3 run_episode.py \
         --data /path/to/questions.json \
         --run-name episode_smoke \
+        [--strategy react|reflexion] [--max-trials 4] \
         [--limit 3] \
         [--max-steps 6]
 
@@ -28,7 +35,7 @@ import json, os, sys, time, argparse, subprocess
 import llm
 from environment import DistractorDocstore
 from wiki_docstore import WikipediaDocstore
-from agents import ReactAgent, normalize_answer
+from agents import ReactAgent, ReactReflectAgent, normalize_answer
 from llm import AnyOpenAILLM
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -37,6 +44,8 @@ p.add_argument("--data",      required=True,          help="JSON or .joblib ques
 p.add_argument("--run-name",  required=True,          help="output directory name")
 p.add_argument("--limit",     type=int, default=None, help="cap number of questions")
 p.add_argument("--max-steps", type=int, default=6,    help="max ReAct steps per episode")
+p.add_argument("--strategy",  choices=["react", "reflexion"], default="react")
+p.add_argument("--max-trials", type=int, default=4,    help="reflexion only: max retry trials")
 p.add_argument("--retrieval", choices=["wikipedia", "distractor"], default="wikipedia",
                help="wikipedia: live MediaWiki API, question-only, ignores ex['context']; "
                     "distractor: local DistractorDocstore built from ex['context']")
@@ -98,12 +107,18 @@ if os.path.exists(LOG):
     done = {json.loads(l)["qid"] for l in open(LOG)}
     print(f"checkpoint: {len(done)} done, resuming")
 
-# ── LLM (react only; no reflect_llm needed) ───────────────────────────────────
+# ── LLM ────────────────────────────────────────────────────────────────────────
 react_llm = AnyOpenAILLM(
     temperature=0, max_tokens=100, model_name=MODEL,
     model_kwargs={"stop": "\n"},
     openai_api_key="EMPTY", openai_api_base=BASE_URL,
 )
+reflect_llm = None
+if args.strategy == "reflexion":
+    reflect_llm = AnyOpenAILLM(
+        temperature=0, max_tokens=250, model_name=MODEL,
+        openai_api_key="EMPTY", openai_api_base=BASE_URL,
+    )
 
 # ── episode loop ──────────────────────────────────────────────────────────────
 with open(LOG, "a") as fout:
@@ -124,24 +139,42 @@ with open(LOG, "a") as fout:
                 sentences=list(ex["context"]["sentences"]),
             )
 
-        # online_feedback=False:
-        #   • step() Finish branch skips is_correct() entirely
-        #   • scratchpad never receives "Answer is CORRECT/INCORRECT"
-        #   • gold (agent.key) is stored but never read during run()
-        agent = ReactAgent(
-            question=ex["question"],
-            key=ex["answer"],          # stored only; never accessed during run()
-            max_steps=args.max_steps,
-            docstore=docstore,
-            react_llm=react_llm,
-            online_feedback=False,     # ← gold leakage cutoff
-        )
-
         c0 = llm.call_counter
         t0 = time.time()
-        agent.run(reset=True)
 
-        # ── offline evaluation (first time gold is used) ──────────────────
+        if args.strategy == "react":
+            # online_feedback=False:
+            #   • step() Finish branch skips is_correct() entirely
+            #   • scratchpad never receives "Answer is CORRECT/INCORRECT"
+            #   • gold (agent.key) is stored but never read during run()
+            agent = ReactAgent(
+                question=ex["question"],
+                key=ex["answer"],          # stored only; never accessed during run()
+                max_steps=args.max_steps,
+                docstore=docstore,
+                react_llm=react_llm,
+                online_feedback=False,     # ← gold leakage cutoff
+            )
+            agent.run(reset=True)
+            trials_used = 1
+        else:
+            agent = ReactReflectAgent(
+                question=ex["question"],
+                key=ex["answer"],
+                max_steps=args.max_steps,
+                docstore=docstore,
+                react_llm=react_llm,
+                reflect_llm=reflect_llm,
+                rules_text="",              # never imports consolidation.py/schedulers.py
+            )
+            for trial in range(args.max_trials):
+                agent.run(reset=True)
+                if agent.is_correct():
+                    break
+            trials_used = trial + 1
+
+        # ── offline evaluation (first time gold is used for react; already
+        #    used mid-loop by ReactReflectAgent.run() for reflexion) ───────
         pred = agent.answer
         gold = ex["answer"]
         pt     = normalize_answer(pred).split()
@@ -167,6 +200,7 @@ with open(LOG, "a") as fout:
             "pred":       pred,
             "em":         em,
             "f1":         f1,
+            "trials_used": trials_used,
             "llm_calls":  llm.call_counter - c0,
             "wall_s":     round(time.time() - t0, 1),
             "trajectory": agent.scratchpad,
@@ -176,7 +210,7 @@ with open(LOG, "a") as fout:
         }
         fout.write(json.dumps(record, ensure_ascii=False) + "\n")
         fout.flush()
-        print(f"[{qi}/{len(questions)}] em={em} f1={f1:.3f} "
+        print(f"[{qi}/{len(questions)}] em={em} f1={f1:.3f} trials={trials_used} "
               f"steps={steps_used} finished={finished} halted={halted} "
               f"calls={record['llm_calls']}")
 

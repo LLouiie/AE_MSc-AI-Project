@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:nvidia_a40:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --output=/vol/gpudata/jy625-ae-data/logs/vllm-qwen3-8b-%j.out
 
 mkdir -p /vol/gpudata/jy625-ae-data/logs

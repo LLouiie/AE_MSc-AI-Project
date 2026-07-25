@@ -147,3 +147,9 @@ hotpotqa_runs/smoke_inspect.txt
 # PBS job stdout/stderr logs (jobname.e<id> / jobname.o<id>)
 *.e[0-9]*
 *.o[0-9]*
+
+# Third-party baseline repos (ReflexGrad, ADaPT, etc.), cloned fresh with
+# git clone rather than vendored — each has its own nested .git. Any patches
+# we make on top are documented in commit messages / handoff notes, not
+# tracked here.
+external/

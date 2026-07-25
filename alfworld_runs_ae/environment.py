@@ -59,6 +59,23 @@ def get_task_type(name: str) -> str:
     return 'put'
 
 
+def _resolve_env_cls(type_name: str):
+    """alfworld<=0.3.5 re-exports Alfred*Env at the `environment` package
+    level; alfworld>=0.4 moved them into per-class submodules
+    (environment.alfred_tw_env.AlfredTWEnv etc.) without re-exporting.
+    Try both so this works unpinned across the alfworld035 (0.3.5) and
+    reflexion_hotpot (0.4.2) conda envs."""
+    if hasattr(alfworld.agents.environment, type_name):
+        return getattr(alfworld.agents.environment, type_name)
+    submodule_name = {
+        "AlfredTWEnv": "alfred_tw_env",
+        "AlfredThorEnv": "alfred_thor_env",
+        "AlfredHybrid": "alfred_hybrid",
+    }[type_name]
+    submodule = importlib.import_module(f"alfworld.agents.environment.{submodule_name}")
+    return getattr(submodule, type_name)
+
+
 def make_alfworld_env(config_file: str = CONFIG_FILE):
     """Create and return an ALFWorld AlfredTWEnv batch env (batch_size=1)."""
     importlib.reload(alfworld)
@@ -66,7 +83,7 @@ def make_alfworld_env(config_file: str = CONFIG_FILE):
     with open(config_file) as f:
         config = yaml.safe_load(f)
     split = "eval_out_of_distribution"
-    env_cls = getattr(alfworld.agents.environment, config["env"]["type"])
+    env_cls = _resolve_env_cls(config["env"]["type"])
     env = env_cls(config, train_eval=split)
     return env.init_env(batch_size=1)
 

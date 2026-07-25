@@ -1,4 +1,6 @@
 import json, os, sys, time, argparse, subprocess
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # moved into legacy/, parent has llm.py/environment.py/agents.py
 import llm
 from environment import DistractorDocstore
 from agents import ReactReflectAgent, ReflexionStrategy, normalize_answer

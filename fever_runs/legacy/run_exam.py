@@ -1,6 +1,8 @@
 import json, os, sys, time, argparse, subprocess
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'hotpotqa_runs'))
+# moved into legacy/, one extra directory level below the original run_exam.py location
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))                  # fever_runs: environment.py, agents.py
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'hotpotqa_runs'))  # llm.py
 import llm
 from llm import AnyOpenAILLM
 

@@ -1,0 +1,25 @@
+# One-shot ALFWorld ICL demonstration config.
+#
+# demo_indices: [0] is applied UNIFORMLY to all six ALFWorld task types
+# (put, clean, heat, cool, examine, puttwo -- see
+# alfworld_runs_ae/environment.py::get_task_type / PREFIXES). This choice
+# was fixed on 2026-08-07, BEFORE any GPU experiment, and must not be
+# revised by comparing per-index scores after the fact.
+#
+# Evidentiary basis (see alfworld_runs_ae/demo_config.py's module docstring
+# for the full writeup): ReflAct (arXiv:2505.15182v2) has no official code
+# release, so its own PDF (Appendix K, Figures 15-18) is the only primary
+# source checked.
+#   - put (pick_and_place) and clean (pick_clean_then_place): CONFIRMED by
+#     verbatim comparison -- the paper's one-shot example for each of these
+#     two types is the same underlying task/trajectory as react_put_0 /
+#     react_clean_0 in alfworld_3prompts.json (react_*_1 is a different
+#     task and does not match).
+#   - heat, cool, examine, puttwo: NOT independently confirmed -- ReflAct's
+#     paper does not publish full one-shot ICL example text for these four
+#     types anywhere in its 33-page PDF. Index 0 here is a PRE-REGISTERED
+#     EXTRAPOLATION from the two confirmed types' consistent pattern,
+#     explicitly authorized by the user with this distinction on record --
+#     it does not itself carry ReflAct-verified evidence.
+num_demos: 1
+demo_indices: [0]

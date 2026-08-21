@@ -1,0 +1,108 @@
+# ABLATION: environment-agnostic signals only.
+#
+# Question this answers: how much of AE's benefit comes from signals that need
+# an environment-specific adapter, versus signals that any text environment
+# gives you for free? This matters for the generality claim -- if AE only works
+# because someone hand-wrote an ALFWorld action grammar, it does not transfer.
+#
+# Of the ten signals in signals.py::extract(), three cannot be computed without
+# environment-specific knowledge, and this config zeroes exactly those three:
+#
+#   invalid_action      needs the env's admissible-command list
+#                       (signals.py:219 tests `action in admissible_before`)
+#   repeated_action     needs the ALFWorld action grammar in canonical_action.py
+#                       to know "go to shelf 5" and "go to shelf 2" are the same
+#                       move (it does fall back to raw Jaccard, but the signal
+#                       is designed around canonicalization)
+#   unexpected_outcome  needs BOTH the action-family split (exploratory vs
+#                       state-changing, signals.py:285-288) and ALFWorld's own
+#                       literal no-op string "Nothing happens." (signals.py:257)
+#
+# What survives is computable from observation text, raw action strings and the
+# step counter alone:
+#   repeated_observation  Jaccard over recent observations
+#   observation_novelty   1 - repeated_observation
+#   progress_signal       novel observation on a non-think action
+#   budget_ratio          step_index / max_steps
+#
+# HONEST CAVEAT, do not report this as a pure zero-adapter result:
+# progress_signal is itself gated on `invalid_action == 1.0` inside
+# signals.py:315, so a residual dependency on the admissible-command list
+# remains even with its weight zeroed. Removing that gate is a code change to
+# frozen, sha256-pinned controller code, which this ablation deliberately does
+# not make -- this is a pure-YAML ablation so it can run against the exact same
+# binary as every other result in the project. The claim it supports is
+# "the affect state is driven only by environment-agnostic signals", not
+# "no environment-specific code executed".
+#
+# consecutive_exact_action_repeat is NOT zeroed and cannot be: it has no
+# weight, it gates frustration_medium in the controller directly. It degrades
+# gracefully in a new environment anyway -- canonical_action.py returns None
+# for unparseable actions and it falls back to exact string equality
+# (signals.py:121), which is environment-agnostic.
+#
+# Everything below other than the three zeroed weights is byte-identical to
+# ae_full_final_nopir_v2_5.yaml, so any difference in outcome is attributable
+# to the zeroed signals alone.
+
+mode: ae_full
+
+initial:
+  uncertainty: 0.30
+  frustration: 0.00
+  surprise: 0.00
+  confidence: 0.60
+
+decay:
+  uncertainty: 0.75
+  frustration: 0.85
+  surprise: 0.35
+  confidence: 0.75
+
+weights:
+  uncertainty:
+    repeated_observation: 0.25
+    budget_ratio: 0.10
+    progress_relief: -0.30
+  frustration:
+    invalid_action: 0.00      # ABLATED (was 0.35) -- needs admissible_commands
+    repeated_action: 0.00     # ABLATED (was 0.30) -- needs the action grammar
+    repeated_observation: 0.20
+    progress_relief: -0.35
+  surprise:
+    unexpected_outcome: 0.00  # ABLATED (was 0.60) -- needs families + "Nothing happens."
+    observation_novelty: 0.25
+  confidence:
+    progress_signal: 0.35
+    observation_novelty: 0.10
+    invalid_action: 0.00      # ABLATED (was -0.25)
+    repeated_action: 0.00     # ABLATED (was -0.15)
+
+hysteresis:
+  uncertainty:
+    enter: 0.65
+    exit: 0.35
+  frustration:
+    enter: 0.70
+    exit: 0.40
+  surprise:
+    enter: 0.60
+    exit: 0.30
+  confidence_low:
+    enter: 0.35
+    exit: 0.55
+
+controller:
+  frustration_medium: 0.45
+  warmup_steps: 3
+  cooldown_steps: 3
+  max_interventions: 3
+  patch_duration_steps: 3
+  recovery_grace_steps: 3
+  post_intervention_repeat_enabled: false
+
+signals:
+  repetition_window: 3
+  unexpected_similarity_threshold: 0.8
+  novelty_progress_threshold: 0.5
+  repetition_trigger_threshold: 0.6

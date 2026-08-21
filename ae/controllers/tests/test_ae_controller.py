@@ -210,8 +210,14 @@ def test_severity_escalation_hidden_by_dominant_mode():
 
 def test_no_retrigger_while_condition_persists():
     """Same abnormal condition sustained unchanged (no severity increase,
-    no rising edges) must not refire every step."""
-    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=50, patch_duration_steps=1)
+    no rising edges) must not refire every step -- tested in isolation
+    from the intervention-outcome-tracking mechanism (Part F) by using a
+    patch_duration_steps long enough that no patch ever expires/gets
+    evaluated within this test's step count. (With a short patch duration
+    an unresolved outcome is SUPPOSED to escalate and refire even while
+    the condition persists -- that's Part F's whole point, covered by
+    test_unresolved_outcome_escalates_after_cooldown below, not this one.)"""
+    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=50, patch_duration_steps=100)
     controller = StatefulController(cfg)
     invalid_step = dict(action="foo", observation="Nothing happens.",
                         admissible_before=["go to bed 1"], recent_actions=[], recent_observations=[],
@@ -278,6 +284,7 @@ class FakeLLM:
     def __init__(self, actions):
         self._actions = list(actions)
         self.seen_prompts = []
+        self.model = "Qwen/Qwen3-8B"  # real model name so count_tokens() can load a tokenizer
 
     def __call__(self, prompt: str) -> str:
         self.seen_prompts.append(prompt)
@@ -407,15 +414,33 @@ def test_recovery_grace_suppresses_immediate_termination():
     # grace this would end the episode after essentially one action ever
     # reaching the environment.
     llm = FakeLLM(["go to nowhere"] * 60)
-    agent = ALFWorldAgent(llm, controller=controller)
+    agent = ALFWorldAgent(llm, controller=controller, termination_policy="legacy_early_stop")
     env = ScriptedFakeEnv([("Nothing happens.", 0, False, False)], admissible=("go to sink 1",))
     trajectory, success = agent.run(env, "task", "put", to_print=False)
 
     check("G1. an intervention fired (invalid_action)", controller.intervention_count > 0)
     check("G2. repeated-action termination was suppressed at least once by recovery grace",
           controller.suppressed_exhausted_count > 0, controller.suppressed_exhausted_count)
-    check("G3. exhaustion still eventually terminates once grace is used up",
-          agent.termination_reason == "exhausted_repeated", getattr(agent, "termination_reason", None))
+    # G3 updated: continuously repeating the exact same action WHILE an
+    # intervention is still pending is now caught by the higher-priority
+    # post-intervention-exact-repeat rule (see stateful_controller.py).
+    # Deterministic trace with THIS scenario's config (max_interventions=5,
+    # so budget is never the binding constraint): step1 invalid_action ->
+    # REFLECT arms; step2 exact repeat while REFLECT pending -> escalates
+    # to REPLAN (intervention_count=2); step3 exact repeat while REPLAN
+    # pending -> terminates. The reason is therefore always exactly
+    # post_replan_exact_repeat here, never the budget-exhausted variant
+    # (confirmed by direct run, not assumed) -- asserted precisely rather
+    # than accepting either reason, since this scenario's outcome is fully
+    # determined.
+    check("G3. the episode terminates via the higher-priority "
+          "post-intervention exact-repeat rule (post_replan_exact_repeat), "
+          "not exhausted_repeated",
+          agent.termination_reason == "post_replan_exact_repeat",
+          getattr(agent, "termination_reason", None))
+    check("G3b. intervention_count is exactly 2 (REFLECT then escalated to "
+          "REPLAN, never a 3rd since REPLAN terminates rather than escalating)",
+          controller.intervention_count == 2, controller.intervention_count)
     check("G4. grace never let the loop run past MAX_STEPS", len(controller.step_log) <= 50)
     check("G5. more than a single action actually reached the environment "
           "(grace gave the directive a real chance, not zero extra steps)",
@@ -429,7 +454,7 @@ def test_recovery_grace_never_bypasses_env_terminal():
                     patch_duration_steps=3, recovery_grace_steps=3)
     controller = StatefulController(cfg)
     llm = FakeLLM(["go to nowhere"] * 10)
-    agent = ALFWorldAgent(llm, controller=controller)
+    agent = ALFWorldAgent(llm, controller=controller, termination_policy="legacy_early_stop")
     # done=True/won=True on the very first (repeated/invalid) step — a real
     # terminal must be honored immediately regardless of grace bookkeeping.
     env = ScriptedFakeEnv([("You win.", 1, True, True)], admissible=("go to sink 1",))
@@ -442,7 +467,7 @@ def test_react_mode_exhaustion_unaffected():
     from agents import ALFWorldAgent, _EXHAUSTED_MSG
 
     llm = FakeLLM(["go to nowhere", "go to nowhere"] + ["go to sink 1"] * 10)
-    agent = ALFWorldAgent(llm, controller=None)
+    agent = ALFWorldAgent(llm, controller=None, termination_policy="legacy_early_stop")
     env = ScriptedFakeEnv([("Nothing happens.", 0, False, False)], admissible=("go to sink 1",))
     trajectory, success = agent.run(env, "task", "put", to_print=False)
     check("G7. react mode: an exact repeated action still ends the episode immediately",
@@ -517,6 +542,129 @@ def test_reset_no_leakage():
           and controller.active_patch_type is None)
 
 
+# ── frustration_medium repeat-gate fix: consecutive_exact_action_repeat ──
+# Real A40 audit finding: `frustration_medium AND (repeated_action OR
+# repeated_observation)` fired 19/19 times purely off repeated_observation
+# (Jaccard over near-identical ALFWorld template text like "On the shelf N,
+# you see nothing."), never once off a genuine repeated action -- routine,
+# never-repeating exploration was misjudged as "stuck". The fix gates on
+# consecutive_exact_action_repeat (strict adjacent-step canonical-or-
+# cleaned-string exact match) instead.
+def test_routine_shelf_exploration_does_not_trigger_medium_frustration_reflect():
+    """idx=0's real pattern: go to shelf 1/2/3/4/5/6, each a genuinely
+    different, never-before-visited location, each returning a
+    near-identical 'On the shelf N, you see nothing.' template (or a
+    non-empty listing). Even if frustration climbs past frustration_medium
+    (0.45) from the accumulated repeated_observation signal (unchanged,
+    still feeds affect_state as before), reflect must NOT fire, since no
+    two consecutive actions are ever an exact repeat."""
+    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=20, patch_duration_steps=1)
+    controller = StatefulController(cfg)
+    shelves = [
+        ("go to shelf 1", "You arrive at shelf 1. On the shelf 1, you see nothing."),
+        ("go to shelf 2", "You arrive at shelf 2. On the shelf 2, you see nothing."),
+        ("go to shelf 3", "You arrive at shelf 3. On the shelf 3, you see nothing."),
+        ("go to shelf 4", "You arrive at shelf 4. On the shelf 4, you see nothing."),
+        ("go to shelf 5", "You arrive at shelf 5. On the shelf 5, you see nothing."),
+        ("go to shelf 6", "You arrive at shelf 6. On the shelf 6, you see nothing."),
+    ]
+    recent_actions, recent_observations = [], []
+    saw_frustration_medium = False
+    reflect_fired = False
+    for action, obs in shelves:
+        r = controller.step(
+            action=action, observation=obs, admissible_before=[f"go to shelf {i}" for i in range(1, 7)],
+            recent_actions=list(recent_actions), recent_observations=list(recent_observations),
+            max_steps=50, is_think_action=False,
+        )
+        if r["state_signature"]["frustration_medium"]:
+            saw_frustration_medium = True
+        if r["intervention"] == InterventionType.REFLECT.value:
+            reflect_fired = True
+        recent_actions.append(action)
+        recent_observations.append(obs)
+    check("F1. frustration_medium was actually reached in this scenario "
+          "(so the non-trigger below is a real gate check, not a vacuous one)",
+          saw_frustration_medium)
+    check("F2. reflect never fires for routine never-repeating shelf "
+          "exploration, even once frustration_medium is active",
+          not reflect_fired)
+
+
+def test_genuine_consecutive_repeat_still_triggers_medium_frustration_reflect():
+    """The positive control: a real stuck loop (same exact action twice in
+    a row, sustained) must still fire reflect once frustration crosses
+    frustration_medium -- the fix must not silently disable this branch
+    entirely, only its false-positive trigger."""
+    # "go to shelf 1" (exploratory family) is used rather than a
+    # state-changing action like "use desklamp 1" -- state-changing
+    # families producing no effect also raise unexpected_outcome/surprise
+    # (see signals.py), which can trigger a VERIFY/escalation path before
+    # frustration_medium is ever reached, confounding this specific check.
+    # Exploratory families are exempt from unexpected_outcome by design.
+    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=20, patch_duration_steps=1)
+    controller = StatefulController(cfg)
+    recent_actions, recent_observations = [], []
+    reflect_fired = False
+    reflect_reason = None
+    for _ in range(6):
+        r = controller.step(
+            action="go to shelf 1", observation="Nothing happens.",
+            admissible_before=["go to shelf 1"],
+            recent_actions=list(recent_actions), recent_observations=list(recent_observations),
+            max_steps=50, is_think_action=False,
+        )
+        if r["intervention"] == InterventionType.REFLECT.value:
+            reflect_fired = True
+            reflect_reason = r["intervention_reason"]
+            break
+        recent_actions.append("go to shelf 1")
+        recent_observations.append("Nothing happens.")
+    check("F3. a genuine consecutive exact repeat still triggers reflect "
+          "once frustration_medium is reached", reflect_fired)
+    check("F4. the logged reason explicitly names consecutive_exact_action_repeat, "
+          "not the old vague 'repeated action/observation'",
+          reflect_reason is not None and "consecutive_exact_action_repeat" in reflect_reason,
+          reflect_reason)
+
+
+def test_invalid_action_branch_unaffected_by_repeat_gate_change():
+    """invalid_action -> REFLECT must still fire on the very first
+    occurrence (rising edge), completely independent of
+    consecutive_exact_action_repeat -- this branch never depended on
+    `repeated` at all (see _select_intervention: `if invalid: return
+    REFLECT, "invalid_action"` short-circuits before the repeat check)."""
+    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=20, patch_duration_steps=1)
+    controller = StatefulController(cfg)
+    r = controller.step(
+        action="foo", observation="Nothing happens.", admissible_before=["go to bed 1"],
+        recent_actions=[], recent_observations=[], max_steps=50, is_think_action=False,
+    )
+    check("F5. invalid_action still fires REFLECT with reason=='invalid_action', unaffected",
+          r["intervention"] == InterventionType.REFLECT.value and r["intervention_reason"] == "invalid_action",
+          (r["intervention"], r["intervention_reason"]))
+
+
+def test_frustration_high_confidence_low_branch_unaffected_by_repeat_gate_change():
+    """frustration_high AND confidence_low -> REPLAN is checked BEFORE the
+    frustration_medium/repeated branch in _select_intervention and never
+    reads `repeated` at all -- must still fire exactly as before."""
+    cfg = AEConfig(warmup_steps=0, cooldown_steps=0, max_interventions=20, patch_duration_steps=1)
+    controller = StatefulController(cfg)
+    saw_replan_with_frustration_high_and_confidence_low = False
+    for _ in range(20):
+        r = controller.step(
+            action="foo", observation="Nothing happens.", admissible_before=["go to bed 1"],
+            recent_actions=[], recent_observations=[], max_steps=50, is_think_action=False,
+        )
+        if (r["state_signature"]["frustration_high"] and r["state_signature"]["confidence_low"]
+                and r["intervention"] == InterventionType.REPLAN.value):
+            saw_replan_with_frustration_high_and_confidence_low = True
+            break
+    check("F6. frustration_high+confidence_low -> REPLAN still fires, unaffected by the repeat-gate change",
+          saw_replan_with_frustration_high_and_confidence_low)
+
+
 if __name__ == "__main__":
     test_bounds()
     test_frustration_accumulates()
@@ -530,6 +678,10 @@ if __name__ == "__main__":
     test_max_interventions()
     test_bool_scalar_parsing()
     test_success_determination_integration()
+    test_routine_shelf_exploration_does_not_trigger_medium_frustration_reflect()
+    test_genuine_consecutive_repeat_still_triggers_medium_frustration_reflect()
+    test_invalid_action_branch_unaffected_by_repeat_gate_change()
+    test_frustration_high_confidence_low_branch_unaffected_by_repeat_gate_change()
     test_recovery_grace_suppresses_immediate_termination()
     test_recovery_grace_never_bypasses_env_terminal()
     test_react_mode_exhaustion_unaffected()

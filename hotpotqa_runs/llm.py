@@ -42,4 +42,24 @@ class AnyOpenAILLM:
             max_tokens=self.max_tokens,
             stop=self.stop,
         )
-        return response.choices[0].text
+        choice = response.choices[0]
+        usage = response.usage
+        # Exposed as an instance attribute rather than a second return value
+        # so every existing call site (`llm(prompt)` used across
+        # hotpotqa_runs/fever_runs/alfworld_runs_ae) keeps working unchanged;
+        # callers that want the metadata for this specific call read
+        # `self.llm.last_meta` immediately after the call.
+        self.last_meta = {
+            "raw_generation": choice.text,
+            "finish_reason": choice.finish_reason,
+            "was_truncated": choice.finish_reason == "length",
+            "usage": (
+                {
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
+                }
+                if usage is not None else "unavailable"
+            ),
+        }
+        return choice.text

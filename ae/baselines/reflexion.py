@@ -20,20 +20,24 @@ from agents import ALFWorldReflectAgent  # noqa: E402
 
 
 def run_episode(env, goal: str, task_type: str, act_llm, reflect_llm,
-                 max_trials: int = 4, to_print: bool = False) -> dict:
-    agent = ALFWorldReflectAgent(act_llm=act_llm, reflect_llm=reflect_llm)
+                 max_trials: int = 4, to_print: bool = False,
+                 termination_policy: str = None, task_id: str = None, demo_config=None) -> dict:
+    agent = ALFWorldReflectAgent(act_llm=act_llm, reflect_llm=reflect_llm,
+                                  termination_policy=termination_policy, demo_config=demo_config)
     trial_records = []
     for trial in range(max_trials):
-        success = agent.run_trial(env, goal, task_type, rules_text="", to_print=to_print)
+        success = agent.run_trial(env, goal, task_type, rules_text="", to_print=to_print, task_id=task_id)
         trial_records.append({
             "trial": trial + 1,
             "success": int(success),
             "trajectory": agent.last_trajectory,
+            "step_log": list(agent.act_agent.step_log),
         })
         if success:
             break
         if trial < max_trials - 1:
-            agent.reflect(goal, task_type)
+            agent.reflect(goal, task_type, task_id=task_id)
+            trial_records[-1]["reflect_trunc_info"] = agent.last_reflect_trunc_info
 
     return {
         "baseline": "reflexion",

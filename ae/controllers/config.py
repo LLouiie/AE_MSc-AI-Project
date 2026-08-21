@@ -117,6 +117,44 @@ class AEConfig:
     # terminal (`done`) or a genuine win.
     recovery_grace_steps: int = 3
 
+    # ---- post-intervention exact-repeat override (see stateful_controller
+    #      .py's HIGHEST-PRIORITY OVERRIDE block) ----
+    # Master switch: False fully disables the override (the step() method
+    # never checks consecutive_exact_action_repeat while an intervention is
+    # pending), reverting to the pre-override behavior in every other
+    # respect (put/move canonicalization, warmup fix, frustration-gate fix,
+    # grace/cooldown/budget/legacy early stop all remain exactly as-is).
+    post_intervention_repeat_enabled: bool = True
+    # False (default): REFLECT escalates to REPLAN on the FIRST consecutive
+    # exact repeat while REFLECT is pending (original behavior).
+    # True: REFLECT does NOT escalate on the first consecutive exact
+    # repeat -- that occurrence is absorbed (logged, no override fires,
+    # the step falls through to normal processing) to give the model one
+    # more chance to recover. Only a SECOND, immediately-consecutive exact
+    # repeat while REFLECT is still pending escalates to REPLAN. VERIFY
+    # (always escalates to REFLECT on first repeat) and REPLAN (always
+    # terminates on first repeat) are unaffected by this flag.
+    post_intervention_repeat_reflect_double: bool = False
+
+    # ---- repeated-action first-encounter REFLECT entry (see
+    #      stateful_controller.py::_select_intervention()) ----
+    # False (default): unchanged original routing -- frustration_high AND
+    # confidence_low always selects REPLAN, regardless of what drove it.
+    # True: when frustration_high AND confidence_low both hold AND a
+    # genuine exact-repeat is present (consecutive_exact_action_repeat)
+    # AND no intervention is currently pending (this is the FIRST time
+    # this specific stuck sequence has been seen, not a recurrence while
+    # something is already active), select REFLECT instead of REPLAN this
+    # once. Reuses the existing patch_duration_steps + meaningful_change_
+    # since_intervention + _ESCALATION[REFLECT]=REPLAN machinery
+    # unchanged for the recover/escalate judgment -- no new mechanism.
+    # Does not affect invalid_action-only routing (no repeat present),
+    # does not affect frustration_high+confidence_low without a repeat,
+    # does not affect VERIFY, and does not touch cooldown/warmup/budget
+    # gating (still applied downstream exactly as before, on whichever
+    # candidate is returned).
+    reflect_first_encounter_repeat_enabled: bool = False
+
     # ---- signal extraction ----
     signals: SignalConfig = field(default_factory=SignalConfig)
 
@@ -174,6 +212,12 @@ def load_config(path: str | None) -> AEConfig:
         max_interventions=controller.get("max_interventions", cfg.max_interventions),
         patch_duration_steps=controller.get("patch_duration_steps", cfg.patch_duration_steps),
         recovery_grace_steps=controller.get("recovery_grace_steps", cfg.recovery_grace_steps),
+        post_intervention_repeat_enabled=controller.get(
+            "post_intervention_repeat_enabled", cfg.post_intervention_repeat_enabled),
+        post_intervention_repeat_reflect_double=controller.get(
+            "post_intervention_repeat_reflect_double", cfg.post_intervention_repeat_reflect_double),
+        reflect_first_encounter_repeat_enabled=controller.get(
+            "reflect_first_encounter_repeat_enabled", cfg.reflect_first_encounter_repeat_enabled),
         signals=SignalConfig(
             repetition_window=signals.get("repetition_window", cfg.signals.repetition_window),
             unexpected_similarity_threshold=signals.get(

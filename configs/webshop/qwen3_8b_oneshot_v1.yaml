@@ -1,0 +1,35 @@
+# Frozen WebShop protocol shared by every baseline in this project.
+protocol_name: webshop_qwen3_8b_oneshot_v1
+
+model:
+  path: /vol/gpudata/jy625-ae-data/models/Qwen3-8B
+  served_name: Qwen/Qwen3-8B
+  temperature: 0.0
+  max_tokens_per_action: 100
+  enable_thinking: false
+  thinking_control_method: chat_template_kwargs.enable_thinking=false
+
+environment:
+  root: /vol/gpudata/jy625-ae-data/webshop_official
+  catalogue: data/items_shuffle.json
+  attributes: data/items_ins_v2.json
+  index: search_engine/indexes
+  task_ids:
+    prefix: fixed_
+    start: 0
+    count: 100
+  max_steps: 15
+
+prompt:
+  action_demo: webshop_runs/base_prompt.txt
+  num_action_demos: 1
+
+evaluation:
+  seed: 42
+  success_threshold: 1.0
+  metrics:
+    - success_rate
+    - mean_reward
+
+# Method-specific mechanisms vary; everything above remains invariant across
+# ReAct, Reflexion, ADaPT, ReflexGrad and AE.

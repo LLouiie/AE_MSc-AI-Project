@@ -33,6 +33,10 @@ from ae.baselines import react as react_baseline  # noqa: E402
 from ae.baselines import reflexion as reflexion_baseline  # noqa: E402
 from ae.baselines import ae_full as ae_full_baseline  # noqa: E402
 from ae.controllers.config import load_config as load_ae_config  # noqa: E402
+from agents import (  # noqa: E402
+    ACT_MAX_TOKENS, ACT_STOP, DEFAULT_TERMINATION_POLICY, PromptBudgetExceededError,
+)
+from demo_config import load_demo_config  # noqa: E402
 
 IMPLEMENTED_BASELINES = {"react", "reflexion", "ae_full"}
 # fixed_interval / stateless_trigger / ae_no_hysteresis: interface reserved
@@ -42,8 +46,8 @@ PLANNED_BASELINES = {"adapt", "reflact", "reflexgrad", "fixed_interval", "statel
 
 
 def build_llms(model: str, base_url: str):
-    act_llm = AnyOpenAILLM(temperature=0, max_tokens=50, model_name=model,
-                            model_kwargs={"stop": ["\n"]},
+    act_llm = AnyOpenAILLM(temperature=0, max_tokens=ACT_MAX_TOKENS, model_name=model,
+                            model_kwargs={"stop": ACT_STOP},
                             openai_api_key="EMPTY", openai_api_base=base_url)
     reflect_llm = AnyOpenAILLM(temperature=0, max_tokens=300, model_name=model,
                                 openai_api_key="EMPTY", openai_api_base=base_url)
@@ -62,6 +66,16 @@ def main():
                     help="Reflexion only: max retry trials per task")
     p.add_argument("--ae-config", default=os.path.join(REPO_ROOT, "configs", "controllers", "ae_full.yaml"),
                     help="ae_full only: path to AEConfig yaml")
+    p.add_argument("--demo-config", default=None,
+                    help="Path to a demo_config yaml (see configs/demos/*.yaml) selecting the "
+                         "number/index of ALFWorld ICL examples in the base prompt. Shared by "
+                         "react/reflexion/ae_full alike. Default (omitted): the original "
+                         "hardcoded two-shot prompt, byte-identical to pre-existing runs.")
+    p.add_argument("--termination-policy", default=DEFAULT_TERMINATION_POLICY,
+                    choices=["fixed_horizon", "legacy_early_stop"],
+                    help="fixed_horizon (default): only won/env-terminal/MAX_STEPS end an "
+                         "episode, same for every baseline. legacy_early_stop: original "
+                         "exact-repeat early termination (+ AE recovery grace).")
     p.add_argument("--model", default=os.getenv("OPENAI_MODEL", "Qwen/Qwen2.5-32B-Instruct"))
     p.add_argument("--base-url", default=os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1"))
     p.add_argument("--output-dir", default=os.path.join(os.path.dirname(__file__), "runs"))
@@ -90,6 +104,7 @@ def main():
     act_llm, reflect_llm = build_llms(args.model, args.base_url)
     logger = JsonlLogger(log_path)
     ae_config = load_ae_config(args.ae_config) if args.baseline == "ae_full" else None
+    demo_config = load_demo_config(args.demo_config)
 
     for qi, task in enumerate(tasks, 1):
         # alfworld_tasks_suffix.json rows have {"goal", "gamefile"}, no
@@ -116,18 +131,43 @@ def main():
         c0 = call_counter()
         t0 = time.time()
 
-        if args.baseline == "react":
-            result = react_baseline.run_episode(env, goal, task_type, act_llm)
-        elif args.baseline == "reflexion":
-            result = reflexion_baseline.run_episode(
-                env, goal, task_type, act_llm, reflect_llm, max_trials=args.max_trials
-            )
-        elif args.baseline == "ae_full":
-            result = ae_full_baseline.run_episode(env, goal, task_type, act_llm, ae_config)
-        else:
-            raise AssertionError("unreachable")
-
-        env.close()
+        try:
+            if args.baseline == "react":
+                result = react_baseline.run_episode(
+                    env, goal, task_type, act_llm, termination_policy=args.termination_policy,
+                    task_id=env_name, demo_config=demo_config,
+                )
+            elif args.baseline == "reflexion":
+                result = reflexion_baseline.run_episode(
+                    env, goal, task_type, act_llm, reflect_llm, max_trials=args.max_trials,
+                    termination_policy=args.termination_policy, task_id=env_name,
+                    demo_config=demo_config,
+                )
+            elif args.baseline == "ae_full":
+                result = ae_full_baseline.run_episode(
+                    env, goal, task_type, act_llm, ae_config,
+                    termination_policy=args.termination_policy, task_id=env_name,
+                    demo_config=demo_config,
+                )
+            else:
+                raise AssertionError("unreachable")
+        except PromptBudgetExceededError as e:
+            # Never sys.exit / crash the rest of the split over one task's
+            # prompt still exceeding the shared context budget after
+            # deterministic truncation + one retry (see agents.py). Record
+            # a clear, explicit incomplete marker and move on -- the run
+            # summary below (and the dispatcher script) must surface this,
+            # never silently report as if every task finished.
+            print(f"[{qi}/{len(tasks)}] baseline={args.baseline} env={env_name} "
+                  f"INCOMPLETE: {e}")
+            result = {
+                "baseline": args.baseline, "success": 0, "incomplete": True,
+                "incomplete_reason": str(e),
+                "tokens_before_truncation": e.tokens_before,
+                "tokens_after_truncation": e.tokens_after,
+            }
+        finally:
+            env.close()
 
         record = {
             "env_name": env_name, "q_index": qi, "goal": goal,
@@ -136,16 +176,26 @@ def main():
             **result,
         }
         logger.write(record)
-        print(f"[{qi}/{len(tasks)}] baseline={args.baseline} success={record['success']} "
-              f"calls={record['llm_calls']} wall_s={record['wall_s']}")
+        if not result.get("incomplete"):
+            print(f"[{qi}/{len(tasks)}] baseline={args.baseline} success={record['success']} "
+                  f"calls={record['llm_calls']} wall_s={record['wall_s']}")
 
     logger.close()
 
     rows = [json.loads(l) for l in open(log_path)]
     n = len(rows)
+    incomplete_rows = [r for r in rows if r.get("incomplete")]
     print("\n===== PILOT DONE =====")
     print(f"N={n}  success_rate={sum(r['success'] for r in rows)/n:.3f}  "
           f"avg_calls={sum(r['llm_calls'] for r in rows)/n:.1f}")
+    if incomplete_rows:
+        print(f"INCOMPLETE: {len(incomplete_rows)}/{n} task(s) never got a real result: "
+              f"{[r['env_name'] for r in incomplete_rows]}")
+        # Nonzero exit so the dispatcher (scripts/slurm/full_react_reflexion.slurm)
+        # can detect this even though the log file still has N lines (each
+        # incomplete task still writes one record) -- a bare line-count
+        # check alone would not catch it.
+        sys.exit(1)
 
 
 if __name__ == "__main__":

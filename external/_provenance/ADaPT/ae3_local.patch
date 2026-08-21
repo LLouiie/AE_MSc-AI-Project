@@ -1,0 +1,244 @@
+diff --git a/run_alfworld.py b/run_alfworld.py
+index cd6e181..9139573 100644
+--- a/run_alfworld.py
++++ b/run_alfworld.py
+@@ -17,8 +17,18 @@ from tenacity import (
+     wait_random_exponential, # type: ignore
+ )
+ # import utils
+-openai.api_key = open('KEY.txt').readlines()[0].rstrip()
+-os.environ["ALFWORLD_DATA"] = 'alfworld/data'
++# AE3 note: original code hard-required an OpenAI key file and always
++# talked to the real OpenAI API (openai.Completion.create / .ChatCompletion
++# .create, pre-1.0 SDK, module-level globals). We're pointing this at a
++# local vLLM server instead, which needs no real key and the modern SDK's
++# client-object pattern (openai>=1.0, already installed, is not
++# backward-compatible with the old openai.Completion.* module functions).
++from openai import OpenAI as _OpenAIClient
++_vllm_client = _OpenAIClient(
++    api_key="EMPTY",
++    base_url=os.environ.get("OPENAI_BASE_URL", "http://localhost:8000/v1"),
++)
++os.environ.setdefault("ALFWORLD_DATA", 'alfworld/data')
+ 
+ 
+ parser = argparse.ArgumentParser()
+@@ -32,7 +42,7 @@ parser.add_argument('--eval-all', help='Should we evaluate on the full test set?
+ parser.add_argument('--max-depth', help='Max decomposition depth', default=3, type=int)
+ parser.add_argument('--max-runs', help='Max number of commands that can be executed in one run.', default=20, type=int)
+ parser.add_argument('--executor', help='Type of executor to be used', default='atomic', choices=['react', 'atomic', 'hybrid'])
+-parser.add_argument('--react-type', help='If using react exec, type of fs prompt to use.', default='std', choices=['std', 'cross', 'common'])
++parser.add_argument('--react-type', help='If using react exec, type of fs prompt to use.', default='std', choices=['std', 'cross', 'common', 'oneshot'])
+ parser.add_argument('--store-results', help="Write the results in a separate file.", type=bool, default=True)
+ parser.add_argument('--no-store', help="Write the results in a separate file.", dest='store_results', action='store_false')
+ parser.add_argument('--info-prop-mode', help="What format of information should be propogated across executors?", default='last-step-last-act', choices=['last-step-last-act', 'all-step-last-act'])
+@@ -69,7 +79,26 @@ where, "{recep}" denotes a receptacle, "{obj}" denotes any object from the envir
+ 
+ @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(10))
+ def llm(prompt, stop=["\n"]):
+-    if 'davinci' in exec_LM:
++    if 'qwen' in exec_LM.lower():
++        # AE3 note: routed through vLLM's raw /v1/completions (not chat),
++        # mirroring the turbo-instruct branch below — same reasoning as
++        # hotpotqa_runs/llm.py: Qwen3's chat template defaults to a <think>
++        # block that breaks this tight single-line completion format, and
++        # raw completions bypasses the chat template entirely (no flag
++        # needed, confirmed on our own ALFWorld/HotpotQA/FEVER runners).
++        if isinstance(prompt, list): prompt = prompt[0]
++        response = _vllm_client.completions.create(
++            model=exec_LM,
++            prompt='Interact with a household to solve a task.\n' + environment_context + '\n' + prompt,
++            temperature=0,
++            max_tokens=100,
++            top_p=1,
++            frequency_penalty=0.0,
++            presence_penalty=0.0,
++            stop=stop
++        )
++        return response.choices[0].text
++    elif 'davinci' in exec_LM:
+       if isinstance(prompt, list): prompt = prompt[0]
+       response = openai.Completion.create(
+         model=exec_LM,
+@@ -127,7 +156,25 @@ def llm(prompt, stop=["\n"]):
+ @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(20))
+ def plan_llm(prompt, stop=["\n\n"]):
+ 
+-    if 'davinci' in LM: 
++    if 'qwen' in LM.lower():
++        if isinstance(prompt, list): prompt = prompt[0]
++        init_message = 'You are a helpful robot navigating through a household. The robot is capable of performing the following tasks:\n\
++- Put an object on a receptacle\n\
++- Take an object from a receptacle\n\
++- Heat / Cool / Clean an object\n\
++- Use a desklamp to look at an object.'
++        response = _vllm_client.completions.create(
++            model=LM,
++            prompt=init_message + '\n' + prompt,
++            temperature=0,
++            max_tokens=400,
++            top_p=1,
++            frequency_penalty=0.0,
++            presence_penalty=0.0,
++            stop=stop
++        )
++        return response.choices[0].text
++    elif 'davinci' in LM:
+       if isinstance(prompt, list): prompt = prompt[0]
+       response = openai.Completion.create(
+         model=LM,
+@@ -194,12 +241,43 @@ elif args.eval_type == 'id':
+     split = "eval_in_distribution"
+ else: assert False, 'Entered eval_type is incorrect!'
+ 
+-orig_env = getattr(alfworld.agents.environment, config["env"]["type"])(config, train_eval=split)
++# AE3 note: written against alfworld==0.2.2 (see requirements.txt), which
++# re-exported AlfredTWEnv etc. at the alfworld.agents.environment module
++# level. alfworld>=0.4 (installed here) moved them into per-class
++# submodules without re-exporting — same issue already worked around in
++# alfworld_runs_ae/environment.py::_resolve_env_cls.
++if hasattr(alfworld.agents.environment, config["env"]["type"]):
++    _env_cls = getattr(alfworld.agents.environment, config["env"]["type"])
++else:
++    import importlib as _importlib
++    _submodule_names = {
++        "AlfredTWEnv": "alfred_tw_env",
++        "AlfredThorEnv": "alfred_thor_env",
++        "AlfredHybrid": "alfred_hybrid",
++    }
++    _submodule = _importlib.import_module(
++        f"alfworld.agents.environment.{_submodule_names[config['env']['type']]}"
++    )
++    _env_cls = getattr(_submodule, config["env"]["type"])
++orig_env = _env_cls(config, train_eval=split)
+ game_files = orig_env.game_files
+ if args.system_seed:
+     game_files.sort()
+ 
+-env = orig_env.init_game(batch_size=1, game_file=game_files[2])
++# AE3 note: alfworld==0.2.2's AlfredTWEnv.init_game(batch_size, game_file=...)
++# selected one specific game directly; alfworld>=0.4 only exposes
++# init_env(batch_size), which registers every game matching the split and
++# cycles through them in directory-scan order on reset() (no per-game
++# selection param at all) — same gap already worked around for our own
++# pipeline via alfworld_runs_ae/environment.py::make_single_task_env.
++# Reusing that pattern here: narrow game_files to the one requested game
++# immediately before registration.
++def _init_single_game(env_obj, game_file):
++    env_obj.game_files = [game_file]
++    env_obj.num_games = 1
++    return env_obj.init_env(batch_size=1)
++
++env = _init_single_game(orig_env, game_files[2])
+ 
+ def process_ob(ob):
+     if ob.startswith('You arrive at loc '):
+@@ -318,13 +396,35 @@ if 'room' in pdict.keys():
+     if 'davinci' in LM:
+         plan_prompt += "Here is the goal.\n<room>\nGoal: <task>.\nCome up with an abstract plan to perform this task in a couple of steps. Constraints: The robot can hold/take/put only one object at a time to a location.\nEnsure each step can be understood independently and mentions the name of object.\nWhen stating the execution order, ensure that 'AND'/'OR' statements are properly nested using brackets '()'.\n"
+     else:
+-        plan_prompt += "Here is the goal.\n<room>\nGoal: <task>.\nBased on the previously shown plans, come up with an abstract plan to perform this task in a couple of steps (NOT more than 3-4). Constraints:\n\
+-        - The robot can hold/take/put only one object at a time to a location.\n\
+-        - Ensure each step can be understood independently and mentions the name of object.\n\
+-        - DO NOT use 'OR' operations in the any step. Keep the step as abstract or generic as possible without mentioning location.\n\
+-        - DO NOT make assumptions about finding an object in a particular location or receptacle (if possible).\n\
+-        - When stating the execution order, ensure that 'AND'/'OR' statements are properly nested using brackets '()'.\n"
+-        
++        # AE3 note (2026-07-27): fixed here after a full diagnostic audit found
++        # plan_llm() NEVER ONCE produced the "Step N:"/"Execution Order:" format
++        # across all 134 ALFWorld tasks in the completed run -- it degenerated
++        # into looping the robot's capability-list bullets until max_tokens=400
++        # truncated it, so plan_to_args() always parsed an empty step list and
++        # every multi-stage task failed outright at depth 1 with zero real
++        # decomposition ever happening (8/134 successes were all single-shot
++        # atomic-executor wins, not genuine ADaPT recursion). A 12-24-task
++        # planner-only A/B test (temperature=0, same model/few-shot/max_tokens)
++        # isolated two independent causes and fixed both, format-only, without
++        # touching constraint SEMANTICS, few-shot content, model, temperature,
++        # or max_tokens:
++        #   (1) every constraint line here used a "- " dash-bullet prefix,
++        #       identical in shape to plan_llm()'s own init_message capability
++        #       list a few lines earlier in the same prompt -- removing the
++        #       dashes and writing the same 5 constraints as plain sentences
++        #       eliminated the capability-list-looping failure entirely
++        #       (18/18 -> 0/18 looping, 18/18 -> 0/18 truncated), but the
++        #       model then free-associated a reasoning preamble that hit the
++        #       "\n\n" stop sequence before ever reaching "Step 1:" (still
++        #       0/18 non-empty plans);
++        #   (2) ending the prompt with a literal "\nStep 1:" (see plan_and_run's
++        #       call site below) forces the completion to continue directly
++        #       into the expected shape instead of an instruction the model
++        #       could choose to ignore -- combined with (1), this reached
++        #       18/18 (100%) non-empty, correctly-parsed plans in the A/B test,
++        #       comfortably above the 90% bar.
++        plan_prompt += "Here is the goal.\n<room>\nGoal: <task>.\nBased on the previously shown plans, come up with an abstract plan to perform this task in a couple of steps (NOT more than 3-4). The robot can hold, take, or put only one object at a time to a location. Ensure each step can be understood independently and mentions the name of the object. Do not use 'OR' operations in any step; keep each step as abstract or generic as possible without mentioning location. Do not make assumptions about finding an object in a particular location or receptacle if possible. When stating the execution order, ensure that 'AND'/'OR' statements are properly nested using brackets '()'.\nRespond with only the plan, in exactly this format and nothing else:\nStep 1: <subtask>\nStep 2: <subtask>\nExecution Order: (Step 1 AND Step 2)\n"
++
+ 
+ else:
+ 
+@@ -341,8 +441,35 @@ else:
+         - When stating the execution order, ensure that 'AND'/'OR' statements are properly nested using brackets '()'.\n"
+ 
+ 
++# AE3 note: ONE_SHOT_DEMO_INDEX / the 'oneshot' react-type below are the only
++# additions to this file's prompting logic. Upstream's 'std'/'cross'/'common'
++# are untouched and still produce byte-identical prompts.
++#
++# Why it is needed: upstream fetch_react_prompt() is hardcoded TWO-shot for
++# every react-type -- `d[f'react_{v}_1'] + d[f'react_{v}_0']`, under a literal
++# "Here are two examples." header. This project's ReAct/AE/Reflexion results
++# are all ONE-shot, so a two-shot ADaPT executor would be compared against
++# one-shot everything else and any gap would partly be a demo-count gap.
++#
++# The per-type indices are exactly the mapping used by the ReAct and AE runs
++# (put/examine -> 0, heat/cool/clean -> 2, puttwo -> 1), so the ADaPT executor
++# sees the byte-identical single demonstration its baselines saw. Note this
++# affects the EXECUTOR only: ADaPT's planner prompts
++# (alfworld_plan_filled_prompts.json) are intrinsic to the method, the same way
++# Reflexion's reflection template is, and are left alone.
++ONE_SHOT_DEMO_INDEX = {
++    'put': 0, 'examine': 0,
++    'heat': 2, 'cool': 2, 'clean': 2,
++    'puttwo': 1,
++}
++
++
+ def fetch_react_prompt(idx, prefixes, d, type):
+-    if type == 'std':
++    if type == 'oneshot':
++        v = prefixes[idx]
++        i = ONE_SHOT_DEMO_INDEX[v]
++        prompt = 'Here is one example.\n' + d[f'react_{v}_{i}'] + '\nHere is the task. If you think you have finished the task, think "Task completed!". If after trying your best, you conclude that the task is infeasible, think "Task failed!\n'
++    elif type == 'std':
+         v = prefixes[idx]
+         prompt = 'Here are two examples.\n' + d[f'react_{v}_1'] + d[f'react_{v}_0'] + '\nHere is the task. If you think you have finished the task, think "Task completed!". If after trying your best, you conclude that the task is infeasible, think "Task failed!\n'
+     elif type == 'cross':
+@@ -517,7 +644,18 @@ def plan_and_run(room, task, env, prompt, past_action_checkpoint=[], past_info_p
+         
+         
+             
+-        plan = plan_llm(plan_prompt.replace('<room>', room).replace('<task>', task))
++        # AE3 note (2026-07-27): "\nStep 1:" completion-forcing skeleton --
++        # part 2 of the planner-format fix, see the non-davinci plan_prompt
++        # branch above for the full root-cause writeup. Ending the PROMPT
++        # itself mid-line (rather than just instructing the model to use
++        # this format) is what actually got Qwen3-8B to continue directly
++        # into "Step 1: ..." instead of a free-form reasoning preamble.
++        _plan_query = plan_prompt.replace('<room>', room).replace('<task>', task)
++        if 'qwen' in LM.lower():
++            _plan_query += '\nStep 1:'
++            plan = '\nStep 1:' + plan_llm(_plan_query)
++        else:
++            plan = plan_llm(_plan_query)
+         if verbose: print_completion(plan)
+         plan_steps = plan_to_args(plan)
+         num_runs += 1
+@@ -569,7 +707,7 @@ rate = 0.0
+ pbar = tqdm(sel_game_files)
+ pbar.set_postfix({'success rate': rate})
+ for game in pbar:
+-    env = orig_env.init_game(batch_size=1, game_file=game)
++    env = _init_single_game(orig_env, game)
+     ob, info = env.reset()
+     ob = '\n'.join(ob[0].split('\n\n')[1:])
+     name = '/'.join(info['extra.gamefile'][0].split('/')[-3:-1])

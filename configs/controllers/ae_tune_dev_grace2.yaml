@@ -1,0 +1,73 @@
+# SWEEP CONFIG (dev60 tuning round): derived from ae_full_final_nopir_v2_5.yaml, single-variable change only -- see audit_reports/dev60_and_sweep_freeze.md
+# Frozen "v2.5" baseline: put/move canonicalization + warmup/edge-detection
+# fix + frustration_medium gate fix (consecutive_exact_action_repeat
+# replacing repeated_action/repeated_observation), with the post-intervention
+# exact-repeat override (PIR) COMPLETELY DISABLED. Identical to ae_full.yaml
+# in every other respect -- no threshold/weight/decay/budget value differs.
+#
+# Standing constraint: these must never be tuned on the test/exam split —
+# any retuning happens against the practice split only.
+
+mode: ae_full
+
+initial:
+  uncertainty: 0.30
+  frustration: 0.00
+  surprise: 0.00
+  confidence: 0.60
+
+decay:
+  uncertainty: 0.75
+  frustration: 0.85
+  surprise: 0.35
+  confidence: 0.75
+
+# new_state = clip(decay * previous_state + signal_delta, 0, 1)
+# signal_delta = sum(weight_i * signal_i) + progress_relief * progress_signal
+weights:
+  uncertainty:
+    repeated_observation: 0.25
+    budget_ratio: 0.10
+    progress_relief: -0.30
+  frustration:
+    invalid_action: 0.35
+    repeated_action: 0.30
+    repeated_observation: 0.20
+    progress_relief: -0.35
+  surprise:
+    unexpected_outcome: 0.60
+    observation_novelty: 0.25
+  confidence:
+    progress_signal: 0.35
+    observation_novelty: 0.10
+    invalid_action: -0.25
+    repeated_action: -0.15
+
+hysteresis:
+  uncertainty:
+    enter: 0.65
+    exit: 0.35
+  frustration:
+    enter: 0.70
+    exit: 0.40
+  surprise:
+    enter: 0.60
+    exit: 0.30
+  confidence_low:
+    enter: 0.35
+    exit: 0.55
+
+controller:
+  frustration_medium: 0.45
+  warmup_steps: 3
+  cooldown_steps: 3
+  max_interventions: 3
+  patch_duration_steps: 3
+  recovery_grace_steps: 2
+  post_intervention_repeat_enabled: false
+
+signals:
+  repetition_window: 3
+  unexpected_similarity_threshold: 0.8
+  novelty_progress_threshold: 0.5
+  repetition_trigger_threshold: 0.6

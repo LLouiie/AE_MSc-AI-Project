@@ -55,6 +55,18 @@ def get_exam_tasks(tasks_file: str = TASKS_FILE):
     return load_task_list(tasks_file)[N_PRACTICE:]
 
 
+def get_all_tasks(tasks_file: str = TASKS_FILE):
+    """Full, unsplit 134-task set -- for published-anchor baselines
+    (react_reflact_anchor, reflexgrad_v4, reflexion_only_reflexgrad_v4),
+    which reproduce published results on the whole eval_out_of_distribution
+    split and must NOT go through the practice(100)/exam(34) split that is
+    this project's own no-test-set-tuning protocol, not part of any of the
+    published methods being reproduced. get_practice_tasks/get_exam_tasks
+    above are untouched by this addition -- their behavior (and every
+    caller's, e.g. ae/runners/run_alfworld.py) is unchanged."""
+    return load_task_list(tasks_file)
+
+
 def get_task_type(name: str) -> str:
     """Return the react_* prompt key prefix for a task name."""
     for prefix, key in PREFIXES.items():

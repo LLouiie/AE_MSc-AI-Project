@@ -152,4 +152,26 @@ hotpotqa_runs/smoke_inspect.txt
 # git clone rather than vendored — each has its own nested .git. Any patches
 # we make on top are documented in commit messages / handoff notes, not
 # tracked here.
-external/
+#
+# external/mpo_reflact/ is the one exception: fetch_and_verify.py and
+# SOURCE.md are small, hand-written, and are themselves what makes the
+# five actual upstream files (downloaded from a pinned MPO commit, verified
+# by SHA-256 in fetch_and_verify.py) reproducible without vendoring MPO's
+# code into this repo's own git history -- see SOURCE.md. The downloaded
+# files stay ignored; only the two files that make them reproducible are
+# tracked.
+external/*
+!external/mpo_reflact/
+external/mpo_reflact/*
+!external/mpo_reflact/fetch_and_verify.py
+!external/mpo_reflact/SOURCE.md
+
+# ADaPT and Reflexion are plain `git clone`s with their own nested .git, so
+# git cannot track files *inside* them without turning them into gitlinks.
+# Their provenance files therefore live outside the clones, in
+# external/_provenance/, which is tracked normally.
+!external/_provenance/
+
+# patch/merge artifacts
+*.orig
+*.rej

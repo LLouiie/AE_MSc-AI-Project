@@ -1,0 +1,9 @@
+# Explicit, self-documenting version of the original hardcoded two-shot
+# base prompt (react_{task_type}_1 concatenated before react_{task_type}_0,
+# "Here are two examples."). Passing this file via --demo-config produces a
+# byte-identical prompt to every existing run that never passed
+# --demo-config at all (see alfworld_runs_ae/demo_config.py::
+# DEFAULT_DEMO_CONFIG) -- this file exists for explicitness/reproducibility
+# in future run configs, not because omitting --demo-config stops working.
+num_demos: 2
+demo_indices: [1, 0]

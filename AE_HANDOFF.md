@@ -468,10 +468,13 @@ tests on 2026-08-20 died with "vLLM not ready" — the first of five 3 GB shards
 active sbatch scripts. If a job dies during startup, check `vllm_server.log` for shard load
 timings before assuming a code fault.
 
-**5.5 HOME has a hard *inode* quota.** 61000 files, currently at the limit, with a 6-day
-grace. Symptom is `Disk quota exceeded` on writing even a 1 KB file, and `df` will not show
-it. `.vscode-server/` alone holds ~42k regenerable files. `ae/runners/runs/` holds 300 MB of
-gitignored run output that belongs on scratch.
+**5.5 HOME has a hard *inode* quota**, and it bites long before the space quota does.
+Limits are 12696M space / **61000 files**. The symptom is `Disk quota exceeded` on writing
+even a 1 KB file, and **`df` will not show it** — check with `quota -s`. This blocked all
+work once, at 61000/61000 files with a 6-day grace. As of 2026-08-21 it has eased to
+5795M / 46617 files, but the usual suspects are still there: `.vscode-server/` holds ~42k
+regenerable files, and `ae/runners/runs/` holds 300 MB of gitignored run output that belongs
+on scratch.
 
 **5.6 Things that live outside the repo and will be lost on a cluster move:**
 `/vol/gpudata/jy625-ae-data/scratch_ae3/sbatch_scripts/` (all run scripts), the ADaPT
@@ -513,25 +516,98 @@ n=5 series **supersedes** them; it does not extend them. Do not pool.
 
 | Item | State |
 |---|---|
-| Reflexion smoke, 12 tasks, one-shot | job **276240** queued (previous attempt died on §5.4) |
-| ADaPT smoke, 12 tasks, one-shot react executor | job **276241** queued (same cause) |
+| Reflexion smoke, 12 tasks | job **276240**, running on gpuvm33 since 2026-08-21 01:44 |
+| ADaPT smoke, 12 tasks | job **276241**, pending (waiting on a GPU) |
 | ReAct rep 4 re-run | `run_react_n5_redo4.sbatch` written, **not submitted** |
 | Text-only-signals ablation | config + script written and self-checking, **not submitted** |
-| Push to GitHub | blocked on §5.5, ~70 changed files, ~7.5 MB |
+| Push to GitHub | commit `12fafc1` made locally; **push blocked, no GitHub credentials on this machine** (`~/.ssh/id_rsa.pub` is not registered on the account) |
 | WebShop | env works end-to-end on the 1000-product subset; full 5.48 GB catalogue downloaded and sha-verified; **Lucene index not built** |
 
-**Baselines being added.** Reflexion and ADaPT, both on ALFWorld, both Qwen3-8B, both
-one-shot with demos consistent with ReAct, 10 repeats each. The plan is smoke-test first,
-then 5 array tasks × 2 repeats (the 6-job QOS cap forbids 10 parallel).
+**Why these two smokes exist.** Reflexion and ADaPT are being added as literature baselines:
+both on ALFWorld, both Qwen3-8B, both one-shot with the §3.3 demo mapping, **10 repeats
+each**. Committing 10 × 134 tasks to an untested code path is the expensive way to find a
+bug, so 12 tasks run first. Once they pass, the full runs go out as **5 array tasks × 2
+repeats** (the 6-job QOS cap forbids 10 in parallel).
 
-Two things to know about ADaPT: its bundled demo pool was verified to be **our demos
-verbatim** plus one trailing `'\n> think: Task completed!'` line (all 18 checked), so
-"demos consistent with ReAct" is a defensible claim. And it currently scores **8/134 (6.0%)**
-with Qwen3-8B under its default `atomic` executor — all 8 in `examine`, zero in the other
-five types — because the planner never emits the required `Step N:` format. The one-shot
-`react` executor path was added specifically to distinguish "our port is broken" from "the
-method is genuinely weak at this model scale." The smoke test reports plan-emission rate for
-that reason.
+Both smokes report to ntfy on exit and write a `RESULT.txt`. Neither needs anyone watching.
+
+### 7.1 Reflexion smoke — job 276240
+
+- Script: `scripts/slurm/ae3_runs/run_reflexion_smoke.sbatch`
+- Logs: `/vol/gpudata/jy625-ae-data/logs/reflex_smoke_276240/` → `batch.log`, `run.log`,
+  `vllm_server.log`, `RESULT.txt`
+- Episode log: `<COPY>/ae/runners/runs/reflexion_smoke_276240/episode_log.jsonl`
+
+`--baseline reflexion` is wired into `ae/runners/run_alfworld.py` and
+`ae/baselines/reflexion.py` exists, but **no sbatch in this project had ever used it** —
+every ALFWorld run so far was `react` or `ae_full`. That path is what is being tested.
+
+Runs `--limit 12 --max-trials 4 --demo-config configs/demos/one_shot_v1.yaml`. Demo handling
+is shared with ReAct (`agents.py::_build_base_prompt` pulls `react_{task_type}_{idx}` driven
+by `--demo-config`, identically for both), so passing the same config gives byte-identical
+one-shot examples — nothing extra to align.
+
+**Three assertions, any of which fails the job:**
+
+1. exactly 12 episodes,
+2. `any(trials_used > 1)` — otherwise the reflexion retry loop never engaged at all,
+3. at least one episode produced reflection text.
+
+Pass looks like `SMOKE TEST PASSED` in `RESULT.txt`. **The score itself is not an assertion**
+— 12 tasks says nothing about accuracy. This test only answers "does the machinery run."
+
+### 7.2 ADaPT smoke — job 276241
+
+- Script: `scripts/slurm/ae3_runs/run_adapt_smoke.sbatch`
+- Logs: `/vol/gpudata/jy625-ae-data/logs/adapt_smoke_276241/`
+- Result JSON: `external/ADaPT/results/comparison/Qwen/Qwen3-8B/smoke_oneshot_react_276241_Qwen/Qwen3-8B.json`
+
+Runs `--executor react --react-type oneshot --num-task-samples 2` (2 per type × 6 types = 12;
+ADaPT does `random.seed(0)` before sampling, so the 12 are deterministic).
+
+**Context that makes this test necessary.** ADaPT has already been run here at full scale and
+scored **8/134 (6.0%)** — all 8 wins in `examine`, and 0 in each of the other five types. The
+cause was diagnosed: `plan_llm()` never once emitted the required `Step N:` /
+`Execution Order:` format, so `plan_to_args()` always parsed an empty plan and every
+multi-stage task failed at depth 1 with **no decomposition happening at all**. The 8 wins were
+single-shot atomic-executor hits, not ADaPT recursion.
+
+That run used the default `atomic` executor. This one uses the one-shot `react` executor,
+which is a materially different configuration, so the 6% figure does not predict it.
+
+**How to read the result — this is the part that matters.** The script prints:
+
+```
+tasks with a non-empty plan: N/12
+```
+
+- **N = 0** → the planner is *still* emitting nothing. The old bug is not fixed and the
+  number that follows is meaningless as a measurement of ADaPT. Do not run 10 repeats.
+- **N ≈ 12** → decomposition is genuinely happening. Whatever score comes out is then a
+  real measurement of the method at this model scale, low or not, and the 10 repeats are
+  worth spending.
+
+This is the whole point of the smoke: **distinguish "our port is broken" from "the method is
+genuinely weak with an 8B model."** Only the second is publishable as a baseline. Note the
+planner-format fix described in `external/_provenance/ADaPT/SOURCE.md` reached 18/18
+non-empty plans in an isolated planner-only A/B, so N=0 here would be a surprise worth
+investigating rather than an expected outcome.
+
+### 7.3 If a smoke dies during startup
+
+Check `vllm_server.log` for shard load timings **before** suspecting the code. Both of these
+jobs already died once (276093 / 276094 on 2026-08-20) purely because `/vol/gpudata` was
+thrashing — the first of five 3 GB shards took 6m40s, about 8 MB/s, against 235 MB/s
+measured the next day. Nothing was wrong with either script. The readiness wait was raised
+from 20 to **45 minutes** in response; that is the current value in all four active scripts.
+
+### 7.4 Demo-pool provenance for ADaPT
+
+ADaPT's bundled ALFWorld demos were checked against ours: all 18 are our demos **verbatim**,
+plus one trailing `'\n> think: Task completed!'` line its executor protocol requires. So
+"demos consistent with ReAct" is a checked statement, not an assumption. The one-shot
+mapping affects the **executor** only — ADaPT's planner prompts are intrinsic to the method,
+the same way Reflexion's reflection template is, and are deliberately left alone.
 
 ---
 

@@ -63,12 +63,12 @@ fi
 
 PORT=$((9300 + (SLURM_ARRAY_JOB_ID % 300) + SLURM_ARRAY_TASK_ID))
 curl -s -o /dev/null -m 2 "http://localhost:${PORT}/v1/models" && fail "port $PORT occupied"
-log "starting fresh vLLM on port $PORT"
+log "starting fresh vLLM on $(hostname) port $PORT"
 "$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 \
     > "$MODE_ROOT/vllm.log" 2>&1 &
 VLLM_PID=$!
 BASE_URL=http://localhost:${PORT}/v1
-for _ in $(seq 1 180); do
+for _ in $(seq 1 720); do
     curl -fsS -m 2 "$BASE_URL/models" >/dev/null 2>&1 && break
     kill -0 "$VLLM_PID" 2>/dev/null || fail "vLLM exited"
     sleep 5

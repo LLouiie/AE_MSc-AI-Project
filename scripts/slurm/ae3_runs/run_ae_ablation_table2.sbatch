@@ -16,6 +16,7 @@ MODES=(full no_trigger random_trigger reflect_only replan_only no_trajectory)
 MODE=${MODES[$SLURM_ARRAY_TASK_ID]}
 COPY=/homes/jy625/projects/AE3
 PY=/vol/gpudata/jy625-ae-data/ae3-venv/bin/python3
+VLLM=/vol/gpudata/jy625-ae-data/ae3-venv/bin/vllm
 MODEL=/vol/gpudata/jy625-ae-data/models/Qwen3-8B
 ROOT=/vol/gpudata/jy625-ae-data/logs/ae_ablation_table2_${SLURM_ARRAY_JOB_ID}
 MODE_ROOT=$ROOT/$MODE
@@ -47,7 +48,7 @@ cd "$COPY" || fail "cannot cd to repo"
 PORT=$((9300 + (SLURM_ARRAY_JOB_ID % 300) + SLURM_ARRAY_TASK_ID))
 curl -s -o /dev/null -m 2 "http://localhost:${PORT}/v1/models" && fail "port $PORT occupied"
 log "starting fresh vLLM on port $PORT"
-vllm serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 \
+"$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 \
     > "$MODE_ROOT/vllm.log" 2>&1 &
 VLLM_PID=$!
 BASE_URL=http://localhost:${PORT}/v1

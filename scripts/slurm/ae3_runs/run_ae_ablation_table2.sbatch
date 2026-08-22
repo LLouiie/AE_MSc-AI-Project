@@ -23,7 +23,10 @@ ROOT=/vol/gpudata/jy625-ae-data/logs/ae_ablation_table2_${SLURM_ARRAY_JOB_ID}
 MODE_ROOT=$ROOT/$MODE
 RUNS=$MODE_ROOT/runs
 mkdir -p "$RUNS"
-export TMPDIR=/vol/gpudata/jy625-ae-data/tmp_ae3_scratch
+export TMPDIR=/data/jy625-ae/tmp
+export XDG_CACHE_HOME=/data/jy625-ae/cache
+export TORCHINDUCTOR_CACHE_DIR=/data/jy625-ae/torchinductor_cache
+export VLLM_CACHE_ROOT=/data/jy625-ae/vllm_cache
 export HF_HOME=/vol/gpudata/jy625-ae-data/hf_cache
 export VLLM_USE_FLASHINFER_SAMPLER=0
 
@@ -46,7 +49,7 @@ trap 'rc=$?; [ -n "${VLLM_PID:-}" ] && kill "$VLLM_PID" 2>/dev/null || true; exi
 
 cd "$COPY" || fail "cannot cd to repo"
 
-mkdir -p /data/jy625-ae || fail "cannot create node-local cache root"
+mkdir -p /data/jy625-ae "$TMPDIR" "$XDG_CACHE_HOME" "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" || fail "cannot create node-local cache dirs"
 if [ ! -f "$MODEL/.ae3_complete" ]; then
     log "staging model from Ceph to node-local $MODEL"
     STAGE=$(mktemp -d /data/jy625-ae/Qwen3-8B.stage.XXXXXX) || fail "mktemp failed"
@@ -68,7 +71,7 @@ log "starting fresh vLLM on $(hostname) port $PORT"
     > "$MODE_ROOT/vllm.log" 2>&1 &
 VLLM_PID=$!
 BASE_URL=http://localhost:${PORT}/v1
-for _ in $(seq 1 720); do
+for _ in $(seq 1 1440); do
     curl -fsS -m 2 "$BASE_URL/models" >/dev/null 2>&1 && break
     kill -0 "$VLLM_PID" 2>/dev/null || fail "vLLM exited"
     sleep 5

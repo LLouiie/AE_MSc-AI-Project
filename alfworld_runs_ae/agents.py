@@ -325,15 +325,17 @@ class ALFWorldAgent:
             print(ob)
 
         for step in range(MAX_STEPS):
+            directive = self.controller.active_directive() if self.controller else ""
+            prompt_history = (
+                [] if directive and self.controller.ablation_mode == "no_trajectory" else history
+            )
             prompt_for_llm, trunc_info = _fit_action_prompt(
-                task_type, goal, reflections, rules_text, ob, history,
+                task_type, goal, reflections, rules_text, ob, prompt_history,
                 self.llm.model, ACT_MAX_TOKENS, task_id,
                 demo_config=self.demo_config,
             )
-            if self.controller:
-                directive = self.controller.active_directive()
-                if directive:
-                    prompt_for_llm += f"\n\n{directive}\n"
+            if directive:
+                prompt_for_llm += f"\n\n{directive}\n"
             try:
                 raw_generation = self.llm(prompt_for_llm + '\n')
             except BadRequestError as e:
@@ -342,14 +344,12 @@ class ALFWorldAgent:
                 # One retry with a much tighter budget before giving up --
                 # never sys.exit, the caller decides what "give up" means.
                 retry_prompt, retry_trunc_info = _fit_action_prompt(
-                    task_type, goal, reflections, rules_text, ob, history,
+                    task_type, goal, reflections, rules_text, ob, prompt_history,
                     self.llm.model, ACT_MAX_TOKENS, task_id,
                     extra_margin=PROMPT_SAFETY_MARGIN, demo_config=self.demo_config,
                 )
-                if self.controller:
-                    directive = self.controller.active_directive()
-                    if directive:
-                        retry_prompt += f"\n\n{directive}\n"
+                if directive:
+                    retry_prompt += f"\n\n{directive}\n"
                 try:
                     raw_generation = self.llm(retry_prompt + '\n')
                     prompt_for_llm, trunc_info = retry_prompt, retry_trunc_info
@@ -482,6 +482,10 @@ class ALFWorldAgent:
                 "prompt_tokens_before_truncation": trunc_info["tokens_before"],
                 "prompt_tokens_after_truncation": trunc_info["tokens_after"],
                 "prompt_truncation_actions": trunc_info["dropped"],
+                "ae_ablation_mode": self.controller.ablation_mode if self.controller else None,
+                "trajectory_removed_for_directive": bool(
+                    directive and self.controller and self.controller.ablation_mode == "no_trajectory"
+                ),
             }
             self.step_log.append(step_record)
 

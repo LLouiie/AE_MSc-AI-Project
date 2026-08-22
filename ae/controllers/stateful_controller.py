@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass, field
+import random
 from typing import List, Optional
 
 from ae.core import InterventionType
@@ -75,9 +76,16 @@ _ESCALATION = {
 @dataclass
 class StatefulController:
     config: AEConfig
+    ablation_mode: str = "full"
+    random_seed: int = 42
+    random_trigger_probability: float = 3000.0 / 30523.0
 
     def __post_init__(self) -> None:
+        allowed = {"full", "no_trigger", "random_trigger", "reflect_only", "replan_only", "no_trajectory"}
+        if self.ablation_mode not in allowed:
+            raise ValueError(f"unknown AE ablation mode: {self.ablation_mode!r}")
         self.signal_extractor = SignalExtractor(self.config.signals)
+        self._rng = random.Random(self.random_seed)
         self.reset()
 
     # ---- lifecycle ----------------------------------------------------
@@ -85,6 +93,7 @@ class StatefulController:
         """Clear all per-episode state. Must be called before each new
         episode; the controller itself never resets the environment."""
         self.state: AffectState = initial_state(self.config)
+        self._rng.seed(self.random_seed)
         self.hysteresis = HysteresisTracker()
         self.previous_mode: Mode = Mode.NORMAL  # logging-only, see current_mode()
         self.previous_signature: Optional[StateSignature] = None
@@ -256,6 +265,21 @@ class StatefulController:
 
         signature = compute_signature(self.state, self.hysteresis, self.config)
         candidate, candidate_reason = self._select_intervention(signals, self.state, signature)
+        candidate = self._apply_type_ablation(candidate)
+        if self.ablation_mode == "no_trigger":
+            candidate, candidate_reason = InterventionType.CONTINUE, "trigger ablated"
+        elif self.ablation_mode == "random_trigger":
+            random_eligible = (
+                self.step_index > self.config.warmup_steps
+                and self.cooldown_remaining == 0
+                and self.intervention_count < self.config.max_interventions
+                and self.escalation_pending_type is None
+            )
+            if random_eligible and self._rng.random() < self.random_trigger_probability:
+                candidate = self._random_intervention()
+                candidate_reason = f"random trigger (p={self.random_trigger_probability:.8f}, seed={self.random_seed})"
+            else:
+                candidate, candidate_reason = InterventionType.CONTINUE, "random trigger not selected"
         candidate_severity = _SEVERITY[candidate]
 
         # ---- HIGHEST-PRIORITY OVERRIDE: post-intervention exact-repeat ----
@@ -429,7 +453,7 @@ class StatefulController:
             else:
                 self.current_intervention_outcome = "unresolved"
                 self.unresolved_intervention_count += 1
-                escalated_type = _ESCALATION[self.pending_intervention_type]
+                escalated_type = self._apply_type_ablation(_ESCALATION[self.pending_intervention_type])
                 self.escalation_pending_type = escalated_type
                 self.escalation_reason = (
                     f"{self.pending_intervention_type.value} intervention "
@@ -453,8 +477,11 @@ class StatefulController:
                 getattr(signature, f.name) and not getattr(self.previous_signature, f.name)
                 for f in dataclasses.fields(signature)
             )
-        is_event = candidate != InterventionType.CONTINUE and (
-            severity_upgrade or invalid_rising_edge or flag_rising_edge
+        is_event = (
+            self.ablation_mode == "random_trigger" and candidate != InterventionType.CONTINUE
+        ) or (
+            candidate != InterventionType.CONTINUE and
+            (severity_upgrade or invalid_rising_edge or flag_rising_edge)
         )
 
         intervention = InterventionType.CONTINUE
@@ -555,6 +582,25 @@ class StatefulController:
         }
         self.step_log.append(record)
         return record
+
+    def _apply_type_ablation(self, intervention: InterventionType) -> InterventionType:
+        if intervention == InterventionType.CONTINUE:
+            return intervention
+        if self.ablation_mode == "reflect_only":
+            return InterventionType.REFLECT
+        if self.ablation_mode == "replan_only":
+            return InterventionType.REPLAN
+        return intervention
+
+    def _random_intervention(self) -> InterventionType:
+        # Empirical root-trigger mix from AE Full n=20: VERIFY=586,
+        # REFLECT=1393, REPLAN=1021 (3000 total; escalations excluded).
+        draw = self._rng.random() * 3000.0
+        if draw < 586:
+            return InterventionType.VERIFY
+        if draw < 586 + 1393:
+            return InterventionType.REFLECT
+        return InterventionType.REPLAN
 
     def _arm_intervention(self, intervention: InterventionType, *, escalated_from: Optional[str]) -> None:
         """Shared bookkeeping for firing a new intervention, whether from a

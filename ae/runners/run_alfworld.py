@@ -71,6 +71,12 @@ def main():
                     help="Reflexion only: max retry trials per task")
     p.add_argument("--ae-config", default=os.path.join(REPO_ROOT, "configs", "controllers", "ae_full.yaml"),
                     help="ae_full only: path to AEConfig yaml")
+    p.add_argument("--ae-ablation", default="full",
+                    choices=["full", "no_trigger", "random_trigger", "reflect_only",
+                             "replan_only", "no_trajectory"],
+                    help="AE-only single-component ablation; full preserves production behavior")
+    p.add_argument("--ae-random-seed", type=int, default=42,
+                    help="Base seed for random_trigger; combined stably with task id")
     p.add_argument("--demo-config", default=None,
                     help="Path to a demo_config yaml (see configs/demos/*.yaml) selecting the "
                          "number/index of ALFWorld ICL examples in the base prompt. Shared by "
@@ -151,14 +157,14 @@ def main():
             elif args.baseline == "reflexion":
                 result = reflexion_baseline.run_episode(
                     env, goal, task_type, act_llm, reflect_llm, max_trials=args.max_trials,
-                    termination_policy=args.termination_policy, task_id=env_name,
-                    demo_config=demo_config,
+                    termination_policy=args.termination_policy, task_id=env_name, demo_config=demo_config,
                 )
             elif args.baseline == "ae_full":
                 result = ae_full_baseline.run_episode(
                     env, goal, task_type, act_llm, ae_config,
                     termination_policy=args.termination_policy, task_id=env_name,
                     demo_config=demo_config,
+                    ablation_mode=args.ae_ablation, random_seed=args.ae_random_seed,
                 )
             else:
                 raise AssertionError("unreachable")

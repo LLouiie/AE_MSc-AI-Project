@@ -6,6 +6,7 @@ memory, no environment reset, no parameter updates: the controller is
 constructed fresh per episode and discarded after run_episode() returns.
 """
 
+import hashlib
 import os
 import sys
 
@@ -18,8 +19,14 @@ from ae.controllers.stateful_controller import StatefulController  # noqa: E402
 
 
 def run_episode(env, goal: str, task_type: str, act_llm, config: AEConfig, to_print: bool = False,
-                 termination_policy: str = None, task_id: str = None, demo_config=None) -> dict:
-    controller = StatefulController(config)
+                 termination_policy: str = None, task_id: str = None, demo_config=None,
+                 ablation_mode: str = "full", random_seed: int = 42) -> dict:
+    stable_task_seed = int.from_bytes(
+        hashlib.sha256(f"{random_seed}:{task_id or 'unknown'}".encode()).digest()[:8], "big"
+    )
+    controller = StatefulController(
+        config, ablation_mode=ablation_mode, random_seed=stable_task_seed
+    )
     agent = ALFWorldAgent(act_llm, controller=controller, termination_policy=termination_policy,
                            demo_config=demo_config)
     trajectory, success = agent.run(env, goal, task_type, to_print=to_print, task_id=task_id)
@@ -41,6 +48,8 @@ def run_episode(env, goal: str, task_type: str, act_llm, config: AEConfig, to_pr
     ]
     return {
         "baseline": "ae_full",
+        "ae_ablation_mode": ablation_mode,
+        "ae_random_seed": random_seed,
         "success": int(success),
         "trajectory": trajectory,
         "ae_step_log": merged_step_log,

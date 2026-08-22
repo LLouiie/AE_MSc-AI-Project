@@ -2,7 +2,7 @@ diff --git a/run_alfworld.py b/run_alfworld.py
 index cd6e181..9139573 100644
 --- a/run_alfworld.py
 +++ b/run_alfworld.py
-@@ -17,8 +17,18 @@ from tenacity import (
+@@ -17,8 +17,19 @@ from tenacity import (
      wait_random_exponential, # type: ignore
  )
  # import utils
@@ -15,6 +15,7 @@ index cd6e181..9139573 100644
 +# client-object pattern (openai>=1.0, already installed, is not
 +# backward-compatible with the old openai.Completion.* module functions).
 +from openai import OpenAI as _OpenAIClient
++from alfworld_action_normalize import normalize_alfworld_action
 +_vllm_client = _OpenAIClient(
 +    api_key="EMPTY",
 +    base_url=os.environ.get("OPENAI_BASE_URL", "http://localhost:8000/v1"),
@@ -213,7 +214,16 @@ index cd6e181..9139573 100644
          v = prefixes[idx]
          prompt = 'Here are two examples.\n' + d[f'react_{v}_1'] + d[f'react_{v}_0'] + '\nHere is the task. If you think you have finished the task, think "Task completed!". If after trying your best, you conclude that the task is infeasible, think "Task failed!\n'
      elif type == 'cross':
-@@ -517,7 +644,18 @@ def plan_and_run(room, task, env, prompt, past_action_checkpoint=[], past_info_p
+@@ -438,3 +565,6 @@ def alfworld_run(prompt, to_print=True, ob='', env=env, max_runs=max_runs, outpu
+-        if action.startswith('put'):
+-            action = action.replace(' in ', ' in/on ').replace(' on ', ' in/on ')
++        # AE3 compatibility fix: this ALFWorld data release admits
++        # "move X to Y" while the bundled demos teach legacy
++        # "put X in/on Y" syntax. Normalize only the parsed action that is
++        # about to reach env.step; prompts and model output stay unchanged.
++        action = normalize_alfworld_action(action)
+         observation, reward, done, info = env.step([action])
+@@ -517,7 +647,18 @@ def plan_and_run(room, task, env, prompt, past_action_checkpoint=[], past_info_p
          
          
              
@@ -242,3 +252,70 @@ index cd6e181..9139573 100644
      ob, info = env.reset()
      ob = '\n'.join(ob[0].split('\n\n')[1:])
      name = '/'.join(info['extra.gamefile'][0].split('/')[-3:-1])
+diff --git a/alfworld_action_normalize.py b/alfworld_action_normalize.py
+new file mode 100644
+--- /dev/null
++++ b/alfworld_action_normalize.py
+@@ -0,0 +1,22 @@
++"""Compatibility adapter for the ALFWorld data release used by AE3."""
++
++import re
++
++
++_PUT_RE = re.compile(
++    r"put\s+(.+?)\s+(?:in/on|in|on)\s+(.+)",
++    flags=re.IGNORECASE,
++)
++
++
++def normalize_alfworld_action(action):
++    """Rewrite legacy placement syntax to this environment's command syntax."""
++    if action is None:
++        return None
++    raw_action = action.strip()
++    match = _PUT_RE.fullmatch(raw_action)
++    if not match:
++        return raw_action
++    obj = match.group(1).strip()
++    receptacle = match.group(2).strip()
++    return f"move {obj} to {receptacle}"
+diff --git a/test_alfworld_action_normalize.py b/test_alfworld_action_normalize.py
+new file mode 100644
+--- /dev/null
++++ b/test_alfworld_action_normalize.py
+@@ -0,0 +1,35 @@
++from alfworld_action_normalize import normalize_alfworld_action
++
++
++def test_put_variants_convert():
++    assert normalize_alfworld_action(
++        "put saltshaker 1 in/on drawer 2"
++    ) == "move saltshaker 1 to drawer 2"
++    assert normalize_alfworld_action(
++        "put mug 12 in coffeemachine 3"
++    ) == "move mug 12 to coffeemachine 3"
++    assert normalize_alfworld_action(
++        "PUT pan 2 ON countertop 1"
++    ) == "move pan 2 to countertop 1"
++
++
++def test_non_put_and_malformed_actions_pass_through():
++    for action in (
++        "move mug 1 to fridge 1",
++        "take mug 1 from countertop 1",
++        "cool mug 1 with fridge 1",
++        "put mug 1",
++        "think: I should put the mug in the fridge.",
++    ):
++        assert normalize_alfworld_action(action) == action
++
++
++def test_none_is_safe():
++    assert normalize_alfworld_action(None) is None
++
++
++if __name__ == "__main__":
++    test_put_variants_convert()
++    test_non_put_and_malformed_actions_pass_through()
++    test_none_is_safe()
++    print("3 tests passed")

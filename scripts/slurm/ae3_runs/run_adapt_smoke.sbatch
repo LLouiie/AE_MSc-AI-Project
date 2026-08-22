@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:nvidia_a40:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=/vol/gpudata/jy625-ae-data/logs/adapt_smoke-%j.out
 #SBATCH --error=/vol/gpudata/jy625-ae-data/logs/adapt_smoke-%j.err
 
@@ -47,8 +47,26 @@ export HF_HOME=/vol/gpudata/jy625-ae-data/hf_cache
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export ALFWORLD_DATA=/vol/gpudata/jy625-ae-data/alfworld_data
 
+MODEL_SOURCE=/vol/gpudata/jy625-ae-data/models/Qwen3-8B
+NODE_TMP=${SLURM_TMPDIR:-/tmp/ae3_${USER}_${SLURM_JOB_ID}}
+LOCAL_MODEL=$NODE_TMP/Qwen3-8B
+
 MODEL=Qwen/Qwen3-8B
-FNAME=smoke_oneshot_react_${SLURM_JOB_ID}
+RUN_FULL=${RUN_FULL:-0}
+case "${SLURM_JOB_NAME:-}" in
+    adapt_full*) RUN_FULL=1 ;;
+esac
+if [ "$RUN_FULL" = "1" ]; then
+    FNAME=full_oneshot_react_${SLURM_JOB_ID}
+    TASK_ARGS=(--eval-all True)
+    EXPECTED_TASKS=134
+    RUN_LABEL="full repeat"
+else
+    FNAME=smoke_oneshot_react_${SLURM_JOB_ID}
+    TASK_ARGS=(--num-task-samples 2)
+    EXPECTED_TASKS=12
+    RUN_LABEL="12-task smoke"
+fi
 
 log() { echo "[$(date -Is)] $*" | tee -a "$LOGDIR/batch.log"; }
 fail() { echo "[$(date -Is)] FAILURE: $*" | tee -a "$LOGDIR/batch.log" "$LOGDIR/failure.log"
@@ -58,12 +76,13 @@ fail() { echo "[$(date -Is)] FAILURE: $*" | tee -a "$LOGDIR/batch.log" "$LOGDIR/
 # The job reports its own outcome to ntfy so results arrive without anyone
 # watching the terminal. -m 20 and `|| true` so a slow or unreachable ntfy
 # can never wedge or fail the job it is reporting on.
-JOBLABEL="ADaPT smoke (12 tasks, one-shot react exec)"
+JOBLABEL="ADaPT ${RUN_LABEL} (one-shot react exec)"
 notify() { curl -s -m 20 -H "Title: $1" -d "$2" https://ntfy.sh/AE_new_alert >/dev/null 2>&1 || true; }
 on_exit() {
     rc=$?
     log "job ending, exit $rc"
     [ -n "${VLLM_PID:-}" ] && kill "$VLLM_PID" 2>/dev/null
+    [ -z "${SLURM_TMPDIR:-}" ] && rm -rf "$NODE_TMP"
     if [ "$rc" -eq 0 ] && [ -s "$LOGDIR/RESULT.txt" ]; then
         notify "OK - $JOBLABEL" "$(head -c 900 "$LOGDIR/RESULT.txt")"
     elif [ "$rc" -eq 0 ]; then
@@ -87,10 +106,23 @@ mkdir -p "$DEST_DIR"
 log "results will land in $DEST_DIR"
 
 source /vol/gpudata/jy625-ae-data/ae3-venv/bin/activate
+
+# Stage the checkpoint once from congested CEPH, then let vLLM perform all
+# shard reads and mmap activity against node-local storage. Staging is kept
+# outside the readiness deadline because CEPH throughput can fall below 10 MB/s.
+mkdir -p "$NODE_TMP" || fail "cannot create node-local staging dir $NODE_TMP"
+avail_kb=$(df -Pk "$NODE_TMP" | awk 'NR==2 {print $4}')
+[ "${avail_kb:-0}" -ge 20971520 ] || fail "less than 20 GiB free in $NODE_TMP"
+log "staging model from CEPH to $LOCAL_MODEL"
+stage_start=$(date +%s)
+cp -a "$MODEL_SOURCE" "$LOCAL_MODEL" || fail "model staging failed"
+stage_seconds=$(( $(date +%s) - stage_start ))
+log "model staged locally in ${stage_seconds}s"
+
 PORT=$(( 8200 + (SLURM_JOB_ID % 600) ))
 curl -s -o /dev/null -m 3 "http://localhost:${PORT}/v1/models" 2>/dev/null && fail "port ${PORT} busy"
 log "starting vLLM on ${PORT}"
-vllm serve /vol/gpudata/jy625-ae-data/models/Qwen3-8B \
+vllm serve "$LOCAL_MODEL" \
     --served-model-name "$MODEL" --port "${PORT}" --host 0.0.0.0 \
     > "$LOGDIR/vllm_server.log" 2>&1 &
 VLLM_PID=$!
@@ -104,12 +136,12 @@ done
 [ "$READY" -eq 1 ] || fail "vLLM not ready within 45 minutes"
 log "vLLM ready, OPENAI_BASE_URL=$OPENAI_BASE_URL"
 
-# --num-task-samples 2 with eval-all off -> 2 per task type x 6 types = 12.
-# ADaPT does random.seed(0) before sampling, so the 12 are deterministic.
+# Smoke mode samples 2 per type; RUN_FULL=1 passes --eval-all True and runs
+# the complete 134-task ExpeL subset through the exact same code path.
 "$PY" run_alfworld.py \
     --LM "$MODEL" --exec-LM "$MODEL" \
     --eval-type ood \
-    --num-task-samples 2 \
+    "${TASK_ARGS[@]}" \
     --executor react --react-type oneshot \
     --max-depth 3 --max-runs 20 \
     --fname "$FNAME" \
@@ -126,7 +158,7 @@ assert hits, "no result file written"
 d = json.load(open(hits[0]))
 o = d["overall"]
 names = ["put","clean","heat","cool","examine","puttwo"]
-print("ADaPT one-shot react executor, 12-task smoke")
+print("ADaPT one-shot react executor, $RUN_LABEL")
 for n, s, c in zip(names, o["success"], o["count"]):
     print(f"  {n:8s} {s}/{c}")
 print(f"  TOTAL    {sum(o['success'])}/{sum(o['count'])} = {100*sum(o['success'])/sum(o['count']):.1f}%")
@@ -137,9 +169,10 @@ plans = [t.get("plans") for k in d if k != "overall" for t in d[k].values()]
 nonempty = [p for p in plans if p]
 print(f"tasks with a non-empty plan: {len(nonempty)}/{len(plans)}"
       "   <-- 0 means the planner is STILL emitting nothing and this is the old bug")
+assert len(plans) == $EXPECTED_TASKS, f"expected $EXPECTED_TASKS tasks, got {len(plans)}"
 if nonempty:
     print("sample plan:", str(nonempty[0])[:300])
-print("SMOKE RAN TO COMPLETION")
+print("RUN COMPLETED")
 PYEOF
-grep -q "SMOKE RAN TO COMPLETION" "$LOGDIR/RESULT.txt" || fail "result parsing failed -- see $LOGDIR/RESULT.txt"
+grep -q "RUN COMPLETED" "$LOGDIR/RESULT.txt" || fail "result parsing failed -- see $LOGDIR/RESULT.txt"
 log "done"

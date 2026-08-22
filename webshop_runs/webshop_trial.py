@@ -5,6 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import Comment
 from env_history import EnvironmentHistory
+from action_parser import parse_webshop_action
 
 from typing import Any, Dict, List, Tuple
  
@@ -12,6 +13,11 @@ BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen3-8B")
 client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+
+ACTION_SYSTEM_PROMPT = """You control a WebShop text environment.
+Return exactly one command and nothing else.
+Valid forms are: search[query], click[item or button], think[short note].
+Do not add an Action: prefix, markdown, explanation, or blank line."""
 
 WEBSHOP_URL = os.getenv("WEBSHOP_URL", "http://127.0.0.1:3000")
 ACTION_TO_TEMPLATE = {
@@ -29,13 +35,16 @@ def llm(prompt, stop=["\n"]):
         while cur_try < 6:
             response = client.chat.completions.create(
                 model=DEFAULT_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": ACTION_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
                 temperature=0.0,
                 max_tokens=100,
                 stop=stop,
                 extra_body={"chat_template_kwargs": {"enable_thinking": False}},
             )
-            text = response.choices[0].message.content
+            text = parse_webshop_action(response.choices[0].message.content)
             # dumb way to do this
             if len(text.strip()) >= 5:
                 return text

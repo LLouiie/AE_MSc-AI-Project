@@ -15,7 +15,7 @@ git apply ../_provenance/ADaPT/ae3_local.patch
 
 ## What `ae3_local.patch` changes
 
-All edits are confined to `run_alfworld.py` and fall into four groups. Upstream's
+Edits fall into six groups. Upstream's
 `std` / `cross` / `common` react-types still produce **byte-identical** prompts.
 
 1. **Local vLLM instead of the OpenAI API.** The original hard-required a `KEY.txt` and
@@ -55,6 +55,22 @@ All edits are confined to `run_alfworld.py` and fall into four groups. Upstream'
    Scope note: this affects the **executor** only. ADaPT's planner prompts
    (`alfworld_plan_filled_prompts.json`) are intrinsic to the method — the same way
    Reflexion's reflection template is — and are deliberately left alone.
+
+5. **ALFWorld placement-action compatibility.** The bundled demonstrations teach
+   `put {obj} in/on {recep}`, but the installed `json_2.1.1` games admit
+   `move {obj} to {recep}`. The old string therefore returned `Nothing happens.`
+   even when the object was held and the target was correct. Immediately before
+   `env.step()`, `alfworld_action_normalize.py` now rewrites complete put actions
+   to move actions. Prompt text, model output, thoughts, observations, and all
+   other action families are unchanged. `test_alfworld_action_normalize.py`
+   covers put variants, numbering, passthrough behavior, and malformed input.
+
+6. **Strict plan-format parsing.** Qwen can place a later Step N definition
+   on the same line as an earlier Execution Order. The upstream parser only
+   recognized line-initial definitions and silently fell back to a partial plan.
+   adapt_plan_parser.py recovers inline definitions, uses the final execution
+   order, and rejects duplicate, missing, or unreferenced steps as INVALID PLAN.
+   It does not reorder subtasks, repair plan semantics, or make another LLM call.
 
 ## Verified claim about the demo pool
 

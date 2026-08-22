@@ -17,7 +17,8 @@ MODE=${MODES[$SLURM_ARRAY_TASK_ID]}
 COPY=/homes/jy625/projects/AE3
 PY=/vol/gpudata/jy625-ae-data/ae3-venv/bin/python3
 VLLM=/vol/gpudata/jy625-ae-data/ae3-venv/bin/vllm
-MODEL=/vol/gpudata/jy625-ae-data/models/Qwen3-8B
+SOURCE_MODEL=/vol/gpudata/jy625-ae-data/models/Qwen3-8B
+MODEL=/data/jy625-ae/Qwen3-8B
 ROOT=/vol/gpudata/jy625-ae-data/logs/ae_ablation_table2_${SLURM_ARRAY_JOB_ID}
 MODE_ROOT=$ROOT/$MODE
 RUNS=$MODE_ROOT/runs
@@ -45,14 +46,29 @@ trap 'rc=$?; [ -n "${VLLM_PID:-}" ] && kill "$VLLM_PID" 2>/dev/null || true; exi
 
 cd "$COPY" || fail "cannot cd to repo"
 
+mkdir -p /data/jy625-ae || fail "cannot create node-local cache root"
+if [ ! -f "$MODEL/.ae3_complete" ]; then
+    log "staging model from Ceph to node-local $MODEL"
+    STAGE=$(mktemp -d /data/jy625-ae/Qwen3-8B.stage.XXXXXX) || fail "mktemp failed"
+    cp -a "$SOURCE_MODEL/." "$STAGE/" || fail "node-local model copy failed"
+    touch "$STAGE/.ae3_complete"
+    if [ -e "$MODEL" ]; then
+        fail "incomplete node-local destination already exists: $MODEL"
+    fi
+    mv "$STAGE" "$MODEL" || fail "cannot publish node-local model cache"
+    log "node-local model staging complete"
+else
+    log "reusing node-local model cache $MODEL"
+fi
+
 PORT=$((9300 + (SLURM_ARRAY_JOB_ID % 300) + SLURM_ARRAY_TASK_ID))
 curl -s -o /dev/null -m 2 "http://localhost:${PORT}/v1/models" && fail "port $PORT occupied"
 log "starting fresh vLLM on port $PORT"
-"$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 --safetensors-load-strategy prefetch \
+"$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 \
     > "$MODE_ROOT/vllm.log" 2>&1 &
 VLLM_PID=$!
 BASE_URL=http://localhost:${PORT}/v1
-for _ in $(seq 1 540); do
+for _ in $(seq 1 180); do
     curl -fsS -m 2 "$BASE_URL/models" >/dev/null 2>&1 && break
     kill -0 "$VLLM_PID" 2>/dev/null || fail "vLLM exited"
     sleep 5

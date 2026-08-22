@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:nvidia_a40:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=09:00:00
 #SBATCH --array=0-5%5
 #SBATCH --output=/vol/gpudata/jy625-ae-data/logs/ae_abl_t2-%A_%a.out
@@ -48,11 +48,11 @@ cd "$COPY" || fail "cannot cd to repo"
 PORT=$((9300 + (SLURM_ARRAY_JOB_ID % 300) + SLURM_ARRAY_TASK_ID))
 curl -s -o /dev/null -m 2 "http://localhost:${PORT}/v1/models" && fail "port $PORT occupied"
 log "starting fresh vLLM on port $PORT"
-"$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 \
+"$VLLM" serve "$MODEL" --served-model-name Qwen/Qwen3-8B --port "$PORT" --host 0.0.0.0 --safetensors-load-strategy prefetch \
     > "$MODE_ROOT/vllm.log" 2>&1 &
 VLLM_PID=$!
 BASE_URL=http://localhost:${PORT}/v1
-for _ in $(seq 1 180); do
+for _ in $(seq 1 540); do
     curl -fsS -m 2 "$BASE_URL/models" >/dev/null 2>&1 && break
     kill -0 "$VLLM_PID" 2>/dev/null || fail "vLLM exited"
     sleep 5

@@ -140,6 +140,35 @@ class StatefulController:
         # one continuous REFLECT window.
         self._reflect_repeat_pending: bool = False
 
+        # ---- prompt-facing text for the REPLAN directive (see
+        #      intervention_renderer.py) -- pure bookkeeping, never read by
+        #      any signal/decision logic:
+        #      - last_nonprogress_action_text / last_nonprogress_observation_text:
+        #        the most recent (action, observation) pair from a step that
+        #        did NOT register local_state_change_proxy>=0.5 (the same
+        #        existing progress signal steps_since_meaningful_change
+        #        already uses elsewhere) -- the two always update together,
+        #        atomically, and ONLY on a non-progress step, so a step that
+        #        DID make progress never overwrites this pair with a
+        #        mislabeled "no observed progress" entry.
+        #      - current_observation_text: the latest observation,
+        #        unconditionally, every step, regardless of progress.
+        #      Default to the raw action/observation step() receives; the
+        #      caller may pass the exact model-visible text via
+        #      display_action_text/display_observation_text when it differs
+        #      (e.g. a think-action's history entry is "OK.", not the raw
+        #      observation).
+        self.last_nonprogress_action_text: Optional[str] = None
+        self.last_nonprogress_observation_text: Optional[str] = None
+        self.current_observation_text: Optional[str] = None
+        # REFLECT admissible-action grounding (see intervention_renderer.py's
+        # module docstring): the commands the environment will actually
+        # accept on the NEXT step, i.e. `admissible_after` from the step
+        # just processed. Recorded here only so active_directive() can pass
+        # it to the renderer -- it is never used for routing, signals, or
+        # any intervention decision, and never auto-corrects an action.
+        self.current_admissible_commands: Optional[list] = None
+
     def consume_grace_step(self) -> None:
         """Called by the agent loop when a would-be exhausted_repeated
         termination is suppressed by an active recovery grace window."""
@@ -179,6 +208,8 @@ class StatefulController:
         reward: Optional[float] = None,
         done: Optional[bool] = None,
         won: Optional[bool] = None,
+        display_action_text: Optional[str] = None,
+        display_observation_text: Optional[str] = None,
     ) -> dict:
         """Process one (action, observation) transition. Returns the full
         log record for this step (also appended to self.step_log)."""
@@ -195,6 +226,27 @@ class StatefulController:
             is_think_action=is_think_action,
             admissible_after=admissible_after,
         )
+
+        # Record what the model actually saw for this turn (falls back to
+        # action/observation when the caller doesn't distinguish) -- used
+        # only by the REPLAN directive's text, never by signal extraction or
+        # any decision below, which continue to use action/observation
+        # exactly as before. current_observation_text always reflects THIS
+        # step, unconditionally; last_nonprogress_{action,observation}_text
+        # update atomically together, and only when this step did NOT
+        # register local_state_change_proxy>=0.5 -- a step that DID make
+        # progress leaves the previous non-progress pair untouched instead
+        # of overwriting it with a mislabeled "no observed progress" entry.
+        _display_action = display_action_text if display_action_text is not None else action
+        _display_observation = display_observation_text if display_observation_text is not None else observation
+        self.current_observation_text = _display_observation
+        # Record what the environment will accept next (pure bookkeeping for
+        # the REFLECT directive -- see current_admissible_commands' comment
+        # in __init__; nothing below reads it).
+        self.current_admissible_commands = list(admissible_after) if admissible_after else None
+        if signals.local_state_change_proxy < 0.5:
+            self.last_nonprogress_action_text = _display_action
+            self.last_nonprogress_observation_text = _display_observation
 
         state_before = self.state.copy()
         self.state = update_state(self.state, signals, self.config)
@@ -544,27 +596,10 @@ class StatefulController:
         repeated = signals.consecutive_exact_action_repeat >= 0.5
 
         if signature.frustration_high and signature.confidence_low:
-            # REPLAN requires sustained evidence beyond the same-step
-            # frustration_high+confidence_low spike: repeated_action shares
-            # weight on both frustration (+) and confidence (-), so a
-            # single exact repeat alone can push both bands simultaneously
-            # within a few steps (see audit_reports/ae_reflect_replan_
-            # formula_redesign*.md) -- that is local-fault evidence for
-            # REFLECT, not on its own evidence of a plan-level failure.
-            # steps_since_meaningful_change (already tracked, reused here
-            # unmodified) crossing patch_duration_steps is the same bar the
-            # controller already uses elsewhere to judge "an intervention
-            # had a fair chance and nothing changed" -- reused here as the
-            # "sustained no-progress" gate for REPLAN specifically.
-            if self.steps_since_meaningful_change >= self.config.patch_duration_steps:
-                return (
-                    InterventionType.REPLAN,
-                    f"frustration_high({state.frustration:.2f}) and confidence_low({state.confidence:.2f}) "
-                    f"sustained(steps_since_meaningful_change={self.steps_since_meaningful_change}"
-                    f">=patch_duration_steps={self.config.patch_duration_steps})",
-                )
-            # Not yet sustained -- fall through; may still resolve to
-            # REFLECT below (invalid_action or frustration_medium+repeated).
+            return (
+                InterventionType.REPLAN,
+                f"frustration_high({state.frustration:.2f}) and confidence_low({state.confidence:.2f})",
+            )
         if invalid or (signature.frustration_medium and repeated):
             if invalid:
                 return InterventionType.REFLECT, "invalid_action"
@@ -582,14 +617,26 @@ class StatefulController:
         return InterventionType.CONTINUE, "no rule matched"
 
     # ---- prompt-facing directive ---------------------------------------
-    def active_directive(self) -> str:
+    def active_directive(self, *, goal: str = "") -> str:
         """Directive text to splice into the NEXT LLM prompt, or "" if no
         patch is active. Never shown as part of the persistent trajectory —
         callers must append this only to the ephemeral prompt string for
-        one LLM call, not to `history`."""
+        one LLM call, not to `history`. `goal` is the only piece of REPLAN
+        prompt-v2's content the controller doesn't already track itself
+        (steps_since_meaningful_change/last_nonprogress_action_text/
+        last_nonprogress_observation_text/current_observation_text are
+        internal state) -- REFLECT/VERIFY ignore it entirely."""
         if self.active_patch_type is None:
             return ""
-        return render_directive(self.active_patch_type)
+        return render_directive(
+            self.active_patch_type,
+            goal=goal,
+            steps_since_meaningful_change=self.steps_since_meaningful_change,
+            last_nonprogress_action=self.last_nonprogress_action_text,
+            last_nonprogress_observation=self.last_nonprogress_observation_text,
+            current_observation=self.current_observation_text,
+            admissible_commands=self.current_admissible_commands,
+        )
 
     # ---- episode summary -------------------------------------------------
     def summary(self, *, success: bool, env_steps: int, termination_reason: str) -> dict:

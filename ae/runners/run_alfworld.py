@@ -61,6 +61,11 @@ def main():
     p.add_argument("--split", choices=["practice", "exam"], default="practice")
     p.add_argument("--run-name", required=True)
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--task-types", default=None,
+                    help="Comma-separated task-type filter (put,clean,heat,cool,examine,puttwo) "
+                         "restricting which tasks from the split are run. Pure task-selection, "
+                         "applied before --limit -- does not touch prompt/controller/demo-config "
+                         "logic in any way. Default: no filter (all types in the split).")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--max-trials", type=int, default=4,
                     help="Reflexion only: max retry trials per task")
@@ -94,6 +99,12 @@ def main():
     snapshot_config(run_dir, vars(args), REPO_ROOT)
 
     tasks = get_practice_tasks() if args.split == "practice" else get_exam_tasks()
+    if args.task_types:
+        allowed_types = {t.strip() for t in args.task_types.split(",") if t.strip()}
+        tasks = [
+            t for t in tasks
+            if get_task_type(t.get("env_name") or t["gamefile"].split("/")[-3]) in allowed_types
+        ]
     if args.limit:
         tasks = tasks[: args.limit]
 

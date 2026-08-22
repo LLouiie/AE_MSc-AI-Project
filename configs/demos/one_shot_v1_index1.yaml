@@ -1,0 +1,21 @@
+# One-shot ALFWorld ICL demonstration config -- index 1 variant, used ONLY
+# for the demo-selection ablation's practice-only pairing run (task #75).
+#
+# demo_indices: [1] is applied uniformly by this config object, but the
+# runner invocation that uses this file is ALSO restricted via
+# `--task-types heat,cool,puttwo,examine` to only those four task types'
+# practice-split tasks -- put/clean are never run under this config, so
+# their (Appendix-K-confirmed) _0 demo is never displaced. This is a pure
+# task-selection restriction in ae/runners/run_alfworld.py (--task-types
+# arg), not a change to demo_config.py, agents.py, or any controller/
+# intervention-prompt logic.
+#
+# Counterpart to configs/demos/one_shot_v1.yaml (index 0, the pre-registered
+# uniform baseline for all six types). See that file's header and
+# alfworld_runs_ae/demo_config.py's module docstring for the full
+# evidentiary background on why heat/cool/puttwo/examine's index-0 choice
+# was a pre-registered extrapolation (not ReflAct-confirmed) and is now
+# being tested against index 1 via paired GPU experiment + McNemar test,
+# per the user's demo-selection ablation spec (2026-08-08).
+num_demos: 1
+demo_indices: [1]

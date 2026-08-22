@@ -1,0 +1,27 @@
+# One-shot ALFWorld ICL demonstration config -- index 2 variant.
+#
+# demo_indices: [2] is applied uniformly by this config object, but every
+# runner invocation that uses this file is ALSO restricted via
+# `--task-types heat,cool,puttwo,examine`, so put/clean are never run under
+# it -- those two types' index-0 demo is the one CONFIRMED verbatim against
+# ReflAct (arXiv:2505.15182v2) Appendix K, Figures 15-18, and must never be
+# displaced (see configs/demos/one_shot_v1.yaml and
+# alfworld_runs_ae/demo_config.py for that evidentiary record).
+#
+# Why index 2 at all: heat/cool/puttwo/examine's index-0 choice was a
+# PRE-REGISTERED EXTRAPOLATION, not ReflAct-confirmed -- the paper prints no
+# one-shot example for those four types anywhere in its 33 pages. Index 1
+# was tested for them in the demo-selection ablation (tasks #74-#78,
+# audit_reports/ae_oneshot_demo_selection_ablation_report.md); index 2 is
+# the remaining untested option in alfworld_3prompts.json (react_{type}_2),
+# and has never been run for any type in this project.
+#
+# Scope note: this file exists because the user explicitly reopened
+# demo-index selection for these four types and authorised tuning against
+# all 134 tasks including exam. Any result obtained with it must therefore
+# be reported as fitted-on-134, NOT as a generalization result -- and the
+# per-type noise floor is large (the ablation's own heat arm swung 14 -> 8
+# between two runs of the IDENTICAL index-0 config), so a single run's
+# per-type delta must not be read as a real effect on its own.
+num_demos: 1
+demo_indices: [2]

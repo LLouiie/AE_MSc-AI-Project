@@ -23,7 +23,7 @@ def main() -> None:
             rows.extend(json.loads(line) for line in handle if line.strip())
 
     incomplete = [row for row in rows if row.get("incomplete")]
-    unique_tasks = {row["env_name"] for row in rows}
+    unique_tasks = {(row["env_name"], row["goal"]) for row in rows}
     counts = {"verify": 0, "reflect": 0, "replan": 0}
     calls = steps = successes = triggered = 0
     for row in rows:

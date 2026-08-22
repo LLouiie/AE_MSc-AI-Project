@@ -73,7 +73,7 @@ def main():
                     help="ae_full only: path to AEConfig yaml")
     p.add_argument("--ae-ablation", default="full",
                     choices=["full", "no_trigger", "random_trigger", "reflect_only",
-                             "replan_only", "no_trajectory"],
+                             "replan_only", "verify_only"],
                     help="AE-only single-component ablation; full preserves production behavior")
     p.add_argument("--ae-random-seed", type=int, default=42,
                     help="Base seed for random_trigger; combined stably with task id")

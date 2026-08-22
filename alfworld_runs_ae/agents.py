@@ -326,11 +326,8 @@ class ALFWorldAgent:
 
         for step in range(MAX_STEPS):
             directive = self.controller.active_directive() if self.controller else ""
-            prompt_history = (
-                [] if directive and self.controller.ablation_mode == "no_trajectory" else history
-            )
             prompt_for_llm, trunc_info = _fit_action_prompt(
-                task_type, goal, reflections, rules_text, ob, prompt_history,
+                task_type, goal, reflections, rules_text, ob, history,
                 self.llm.model, ACT_MAX_TOKENS, task_id,
                 demo_config=self.demo_config,
             )
@@ -344,7 +341,7 @@ class ALFWorldAgent:
                 # One retry with a much tighter budget before giving up --
                 # never sys.exit, the caller decides what "give up" means.
                 retry_prompt, retry_trunc_info = _fit_action_prompt(
-                    task_type, goal, reflections, rules_text, ob, prompt_history,
+                    task_type, goal, reflections, rules_text, ob, history,
                     self.llm.model, ACT_MAX_TOKENS, task_id,
                     extra_margin=PROMPT_SAFETY_MARGIN, demo_config=self.demo_config,
                 )
@@ -483,9 +480,6 @@ class ALFWorldAgent:
                 "prompt_tokens_after_truncation": trunc_info["tokens_after"],
                 "prompt_truncation_actions": trunc_info["dropped"],
                 "ae_ablation_mode": self.controller.ablation_mode if self.controller else None,
-                "trajectory_removed_for_directive": bool(
-                    directive and self.controller and self.controller.ablation_mode == "no_trajectory"
-                ),
             }
             self.step_log.append(step_record)
 

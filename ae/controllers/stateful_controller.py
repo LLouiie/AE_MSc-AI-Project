@@ -78,10 +78,10 @@ class StatefulController:
     config: AEConfig
     ablation_mode: str = "full"
     random_seed: int = 42
-    random_trigger_probability: float = 3000.0 / 30523.0
+    random_trigger_probability: float = 0.5
 
     def __post_init__(self) -> None:
-        allowed = {"full", "no_trigger", "random_trigger", "reflect_only", "replan_only", "no_trajectory"}
+        allowed = {"full", "no_trigger", "random_trigger", "reflect_only", "replan_only", "verify_only"}
         if self.ablation_mode not in allowed:
             raise ValueError(f"unknown AE ablation mode: {self.ablation_mode!r}")
         self.signal_extractor = SignalExtractor(self.config.signals)
@@ -590,17 +590,15 @@ class StatefulController:
             return InterventionType.REFLECT
         if self.ablation_mode == "replan_only":
             return InterventionType.REPLAN
+        if self.ablation_mode == "verify_only":
+            return InterventionType.VERIFY
         return intervention
 
     def _random_intervention(self) -> InterventionType:
-        # Empirical root-trigger mix from AE Full n=20: VERIFY=586,
-        # REFLECT=1393, REPLAN=1021 (3000 total; escalations excluded).
-        draw = self._rng.random() * 3000.0
-        if draw < 586:
-            return InterventionType.VERIFY
-        if draw < 586 + 1393:
-            return InterventionType.REFLECT
-        return InterventionType.REPLAN
+        # Uniform intervention selection requested for Table 2.
+        return self._rng.choice((
+            InterventionType.VERIFY, InterventionType.REFLECT, InterventionType.REPLAN,
+        ))
 
     def _arm_intervention(self, intervention: InterventionType, *, escalated_from: Optional[str]) -> None:
         """Shared bookkeeping for firing a new intervention, whether from a

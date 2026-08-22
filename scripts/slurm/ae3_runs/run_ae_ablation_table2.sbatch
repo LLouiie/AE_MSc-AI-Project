@@ -12,7 +12,7 @@
 
 set -uo pipefail
 
-MODES=(full no_trigger random_trigger reflect_only replan_only no_trajectory)
+MODES=(full no_trigger random_trigger reflect_only replan_only verify_only)
 MODE=${MODES[$SLURM_ARRAY_TASK_ID]}
 COPY=/homes/jy625/projects/AE3
 PY=/vol/gpudata/jy625-ae-data/ae3-venv/bin/python3

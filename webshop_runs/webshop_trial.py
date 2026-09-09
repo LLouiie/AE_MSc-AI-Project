@@ -12,12 +12,16 @@ from typing import Any, Dict, List, Tuple
 BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "EMPTY")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "Qwen/Qwen3-8B")
+MAX_STEPS = int(os.getenv("WEBSHOP_MAX_STEPS", "15"))
 client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 ACTION_SYSTEM_PROMPT = """You control a WebShop text environment.
 Return exactly one command and nothing else.
 Valid forms are: search[query], click[item or button], think[short note].
-Do not add an Action: prefix, markdown, explanation, or blank line."""
+Do not add an Action: prefix, markdown, explanation, or blank line.
+search[...] is valid only on the initial [Search] page. From a product or
+results page, use click[Next >] or click[< Prev] to inspect more results, or first use click[Back to Search] before issuing a new search.
+Never repeat an action after the environment reports Invalid action!"""
 
 WEBSHOP_URL = os.getenv("WEBSHOP_URL", "http://127.0.0.1:3000")
 ACTION_TO_TEMPLATE = {
@@ -175,13 +179,12 @@ class webshopEnv:
                 assert self.sessions[session]['page_type'] in ['search', 'item_sub', 'item']
                 self.sessions[session] = {'session': session, 'page_type': 'init'}
             elif button == 'Next >':
-                assert False # ad hoc page limitation
                 assert self.sessions[session]['page_type'] == 'search'
                 self.sessions[session]['page_num'] += 1
             elif button == '< Prev':
                 assert self.sessions[session]['page_type'] in ['search', 'item_sub', 'item']
                 if self.sessions[session]['page_type'] == 'search':
-                    assert False
+                    assert self.sessions[session]['page_num'] > 1
                     self.sessions[session]['page_num'] -= 1
                 elif self.sessions[session]['page_type'] == 'item_sub':
                   self.sessions[session]['page_type'] = 'item'
@@ -214,25 +217,32 @@ class webshopEnv:
         reward = info.get('reward', 0.0)
         return observation, reward, done
 
-def webshop_run(idx, env, base_prompt, memory: List[str], to_print=True) -> Tuple[EnvironmentHistory, bool]:
+def webshop_run(idx, env, base_prompt, memory: List[str], to_print=True) -> Tuple[EnvironmentHistory, float]:
     action = 'reset'
-    init_prompt = base_prompt
     prompt = ''
 
     res = env.step(idx, action)
     observation = res[0]
-    if len(memory) > 3:
-        env_history = EnvironmentHistory(base_prompt, observation, memory[-3:], [])
-    else:
-        env_history = EnvironmentHistory(base_prompt, observation, memory, [])
+    active_memory = memory[-3:]
+    env_history = EnvironmentHistory(base_prompt, observation, active_memory, [])
+    init_prompt = base_prompt
+    if active_memory:
+        init_prompt += '\nYour memory for the task below:'
+        for i, item in enumerate(active_memory):
+            init_prompt += f'\nTrial {i}:\n{item.strip()}'
+        init_prompt += '\nHere is the task:\n'
     env_history.reset()
-    for i in range(15):
+    for i in range(MAX_STEPS):
         env_history.add("action", action)
         try:
             res = env.step(idx, action)
             observation = res[0]
         except AssertionError:
-            observation = 'Invalid action!'
+            observation = (
+                "Invalid action! From a product or search-results page, "
+                "use click[Back to Search] before search[...]. "
+                "Choose a currently visible click target."
+            )
 
         if action.startswith('think'):
             observation = 'OK.'
@@ -250,11 +260,11 @@ def webshop_run(idx, env, base_prompt, memory: List[str], to_print=True) -> Tupl
         # if done, check if reward is complete value
         if res[2]:
             print(res)
-            return env_history, res[1] == 1.0
+            return env_history, float(res[1])
 
         action = llm(init_prompt + prompt[-(6400-len(init_prompt)):], stop=['\n']).lstrip(' ')
 
-    return env_history, False
+    return env_history, 0.0
 
 def run_trial(
         trial_log_path: str,
@@ -280,7 +290,9 @@ def run_trial(
             continue
 
         try:
-            final_env_history, is_success = webshop_run(f'fixed_{z}', env, BASE_PROMPT, env_config["memory"] if use_memory else [], to_print=True)
+            final_env_history, final_reward = webshop_run(f'fixed_{z}', env, BASE_PROMPT, env_config["memory"] if use_memory else [], to_print=True)
+            is_success = final_reward == 1.0
+            env_configs[z]["reward"] = max(float(env_configs[z].get("reward", 0.0)), final_reward)
             if is_success:
                 status_str: str = f'Environment #{z} Trial #{trial_idx}: SUCCESS'
                 env_configs[z]["is_success"] = True
@@ -305,6 +317,7 @@ def run_trial(
             f.write(status_str + '\n')
 
     # log trial results to trial and world logs
+    average_reward = sum(float(c.get("reward", 0.0)) for c in env_configs) / num_envs
     log_str: str = f"""
 -----
 SUCCESS: {num_successes}
@@ -312,6 +325,7 @@ ADDITIONAL SUCCESS: {num_additional_successes}
 FAIL: {num_envs - num_successes}
 TOTAL: {num_envs}
 ACCURACY: {round(num_successes / num_envs, 2)}
+AVERAGE REWARD: {average_reward:.4f}
 -----"""
     with open(trial_log_path, 'a') as wf:
         wf.write(log_str)

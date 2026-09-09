@@ -49,7 +49,8 @@ def main(args) -> None:
             env_configs += [{
                 'name': f'env_{i}',
                 'memory': [],
-                'is_success': False
+                'is_success': False,
+                'reward': 0.0,
             }]
     
     world_log_path: str = os.path.join(logging_dir, 'world.log')

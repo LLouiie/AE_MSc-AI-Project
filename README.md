@@ -1,27 +1,37 @@
 # Artificial Emotion for Language Agents
 
-This repository evaluates an Artificial Emotion (AE) controller for language agents in interactive environments. AE observes an agent trajectory, maintains four lightweight states (uncertainty, frustration, surprise, and confidence), and transiently injects a `VERIFY`, `REFLECT`, or `REPLAN` directive into the next ReAct prompt. The controller does not require training or an additional LLM call.
+Artificial Emotion (AE) is a lightweight controller for ReAct agents. It monitors the current trajectory, maintains four internal states, and temporarily adds a `VERIFY`, `REFLECT`, or `REPLAN` directive when recovery is needed. It requires no training and no separate LLM call.
 
-The current experiments use ALFWorld and WebShop with ReAct, Reflexion, and ADaPT baselines. This project is built on the original [Reflexion](https://github.com/noahshinn/reflexion) repository.
+This repository contains the AE implementation and evaluation runners for ALFWorld and WebShop, together with ReAct, Reflexion, and ADaPT baselines.
 
-## Repository structure
+## Quickstart
 
-- `ae/`: controller, signals, affect-state updates, baselines, and ALFWorld runner.
-- `alfworld_runs_ae/`: ALFWorld agent loop and environment integration.
-- `webshop_runs/`: WebShop environment adapter and evaluation runners.
-- `configs/controllers/`: AE controller and ablation configurations.
-- `configs/demos/`: one-shot demonstration selections.
-- `scripts/slurm/`: reproducible cluster job scripts.
+Clone the repository and create an environment:
 
-## ALFWorld
+```bash
+git clone git@github.com:LLouiie/AE_MSc-AI-Project.git
+cd AE_MSc-AI-Project
+python -m venv .venv
+source .venv/bin/activate
+pip install -r alfworld_runs/requirements.txt
+pip install alfworld
+```
 
-Start an OpenAI-compatible model server, then run:
+Download ALFWorld and set its data directory:
+
+```bash
+alfworld-download
+export ALFWORLD_DATA=/path/to/alfworld_data
+```
+
+Start an OpenAI-compatible server for `Qwen/Qwen3-8B`, then run a five-task AE smoke test:
 
 ```bash
 python -m ae.runners.run_alfworld \
   --baseline ae_full \
   --split practice \
-  --run-name ae_example \
+  --limit 5 \
+  --run-name quickstart \
   --ae-config configs/controllers/ae_full_final_nopir_v2_5.yaml \
   --demo-config configs/demos/one_shot_v1.yaml \
   --termination-policy legacy_early_stop \
@@ -29,13 +39,25 @@ python -m ae.runners.run_alfworld \
   --base-url http://localhost:8000/v1
 ```
 
-The full 134-task evaluation is split by task type and dataset partition. See `scripts/slurm/ae3_runs/run_ae_n20.sbatch` for the production launch procedure.
+Outputs are written to `ae/runners/runs/quickstart/`.
+
+## Full experiments
+
+Production Slurm scripts are in `scripts/slurm/`. The main ALFWorld evaluation covers all 134 tasks:
+
+```bash
+sbatch scripts/slurm/ae3_runs/run_ae_n20.sbatch
+```
+
+Available AE modes are `full`, `no_trigger`, `random_trigger`, `verify_only`, `reflect_only`, and `replan_only`. See `scripts/slurm/ae3_runs/run_ae_ablation_table2.sbatch` for the ablation setup.
 
 ## WebShop
 
-Start the WebShop environment and an OpenAI-compatible model server, then run:
+WebShop requires its web application and search index to be running. Setup assets are in `webshop_runs/setup/`. With WebShop and the model server available:
 
 ```bash
+export WEBSHOP_URL=http://127.0.0.1:3000
+export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
 cd webshop_runs
 python run_ae.py \
   --num-envs 100 \
@@ -43,17 +65,17 @@ python run_ae.py \
   --output webshop_ae.json
 ```
 
-The environment setup assets are under `webshop_runs/setup/`.
+## Project layout
 
-## Ablations
+- `ae/` — controller, signals, affect-state updates, and runners
+- `alfworld_runs_ae/` — ALFWorld agent and environment integration
+- `webshop_runs/` — WebShop adapter and evaluation runners
+- `configs/` — controller and one-shot demonstration settings
+- `scripts/slurm/` — smoke tests and production jobs
+- `external/ADaPT/` — ADaPT baseline integration
 
-The ALFWorld and WebShop runners share the same AE implementation and expose the following controller modes:
+Generated logs, model files, and result artifacts are not tracked by Git.
 
-- full AE
-- no trigger
-- random trigger
-- VERIFY only
-- REFLECT only
-- REPLAN only
+## Acknowledgements
 
-Generated runs, logs, and result files are intentionally excluded from Git. Production outputs are stored separately from the source checkout.
+This project builds on [Reflexion](https://github.com/noahshinn/reflexion), [ReAct](https://github.com/ysymyth/ReAct), [ALFWorld](https://github.com/alfworld/alfworld), and [WebShop](https://github.com/princeton-nlp/WebShop).

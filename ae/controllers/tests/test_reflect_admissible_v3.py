@@ -13,7 +13,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from ae.core import InterventionType
-from ae.controllers.intervention_renderer import render_directive, _STATIC_DIRECTIVES
+from ae.controllers.intervention_renderer import (
+    render_directive, _STATIC_DIRECTIVES, _ALFWORLD_OUTPUT, _ALFWORLD_REFLECT_OUTPUT,
+)
 
 passed = 0
 failed = 0
@@ -50,13 +52,13 @@ check("1. _STATIC_DIRECTIVES REFLECT body unchanged from v1",
 # 2. VERIFY unchanged from v1, with and without admissible commands passed.
 v_none = render_directive(InterventionType.VERIFY)
 v_adm = render_directive(InterventionType.VERIFY, admissible_commands=ADM)
-check("2a. VERIFY renders v1 body", v_none == f"[ACTIVE CONTROL DIRECTIVE]\n{V1_VERIFY_BODY}")
+check("2a. VERIFY renders v1 body", v_none == f"[ACTIVE CONTROL DIRECTIVE: VERIFY]\n{V1_VERIFY_BODY}\n{_ALFWORLD_OUTPUT}")
 check("2b. VERIFY ignores admissible_commands entirely", v_none == v_adm)
 
 # 3. REFLECT with no admissible list renders exactly v1.
 r_none = render_directive(InterventionType.REFLECT)
 check("3a. REFLECT without list == v1 exactly",
-      r_none == f"[ACTIVE CONTROL DIRECTIVE]\n{V1_REFLECT_BODY}")
+      r_none == f"[ACTIVE CONTROL DIRECTIVE: REFLECT]\n{V1_REFLECT_BODY}\n{_ALFWORLD_REFLECT_OUTPUT}")
 check("3b. REFLECT with empty list == v1 exactly",
       render_directive(InterventionType.REFLECT, admissible_commands=[]) == r_none)
 check("3c. REFLECT with whitespace-only entries == v1 exactly",

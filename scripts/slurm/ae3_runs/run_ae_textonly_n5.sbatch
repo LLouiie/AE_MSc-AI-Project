@@ -91,7 +91,7 @@ log "check 1 OK: 6 result dirs free"
 # Controller code must be byte-identical to the AE n=20 run this is compared to.
 sha256sum "$COPY"/ae/controllers/intervention_renderer.py \
           "$COPY"/ae/controllers/stateful_controller.py > "$LOGDIR/sha256.log" 2>&1
-grep -q "52f20e7dfa794b44873e630ccf420fb78707edb12262787a3e539d8821186424  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
+grep -q "d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
     || fail "intervention_renderer.py sha mismatch"
 grep -q "3127c243b5abcbd9a5115c3d01bd19098dc62527ece63ad099d207a25207164c  $COPY/ae/controllers/stateful_controller.py" "$LOGDIR/sha256.log" \
     || fail "stateful_controller.py sha mismatch"

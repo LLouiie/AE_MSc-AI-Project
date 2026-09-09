@@ -490,7 +490,7 @@ def test_react_mode_no_directive():
     trajectory, success = agent.run(env, "put a mug in the sink", "put", to_print=False)
 
     check("8. controller=None (react mode) never shows a directive in any prompt",
-          all("[ACTIVE CONTROL DIRECTIVE]" not in p for p in llm.seen_prompts))
+          all("[ACTIVE CONTROL DIRECTIVE" not in p for p in llm.seen_prompts))
     check("8b. controller=None still runs the ordinary ReAct loop to completion",
           success is True)
 
@@ -510,7 +510,7 @@ def test_ae_full_wiring_smoke():
     agent = ALFWorldAgent(llm, controller=controller)
     env = FakeEnv(n_steps_until_done=999)  # never naturally completes; loop runs MAX_STEPS or until exhausted
     trajectory, success = agent.run(env, "put a mug in the sink", "put", to_print=False)
-    saw_directive = any("[ACTIVE CONTROL DIRECTIVE]" in p for p in llm.seen_prompts)
+    saw_directive = any("[ACTIVE CONTROL DIRECTIVE" in p for p in llm.seen_prompts)
     check("bonus. ae_full wiring: an intervention directive is actually shown to the LLM",
           saw_directive)
 

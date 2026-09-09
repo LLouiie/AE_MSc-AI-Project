@@ -1,66 +1,8 @@
-"""Renders an InterventionType into the short control-directive text shown
-to the agent. AE never generates actions itself — it only nudges the
-existing ReAct agent's next Thought/Action via this directive block, which
-is injected transiently into the prompt for the LLM call and never written
-into the persistent trajectory/history (see alfworld_runs_ae/agents.py's
-loop for where it's spliced in and dropped).
+"""Render the Appendix A AE directives used by the ReAct agent.
 
-REPLAN prompt-v2 (see audit_reports/ae_intervention_prompt_audit*.md): the
-v1 REPLAN directive was a static template asking the model to "restate the
-task" and "construct a short plan of 2-4 subgoals" without ever actually
-supplying the task text, the specific action that just failed, or the
-current observation -- real-log audit found the model rarely engaged with
-those instructions and, when it DID try to comply in full, it broke the
-enforced one-Thought/one-Action output format twice (producing an
-unparseable action). v2 supplies these variables explicitly (reusing state
-the controller already tracks, plus the raw goal/action/observation text
-the caller already has -- no new state machine) and compresses the
-"restate + new route + why" ask into a single Thought line using compact
-"A -> B -> C" notation, matching what the enforced output format can
-actually hold.
-
-REPLAN prompt-v2 "B+" semantic fix (see
-audit_reports/ae_replan_prompt_v2_last_action_semantics_audit.md): the
-first v2 cut labeled the most recent action "Last failed action" even when
-that action was simply the immediately-preceding one, unconditionally,
-regardless of whether it had actually made progress -- real-log replay
-found 5/15 REPLAN windows where a genuinely-progressing action would have
-been mislabeled this way. The controller now only ever offers an action
-that registered NO observed local state change (local_state_change_proxy <
-0.5, the same progress signal steps_since_meaningful_change already uses),
-and the wording below says exactly that ("no observed progress"), not
-"failed" -- a null observation only proves the absence of a detected
-change, not that the action was semantically wrong.
-
-REPLAN prompt-v2 progress-aware wording fix (see
-audit_reports/ae_replan_prompt_v2_b_plus_report.md section 9 and
-ae_replan_prompt_v2_progress_wording_report.md): REPLAN's directive is
-shown for the full patch_duration_steps window regardless of whether the
-model recovers partway through it (unchanged, by design -- this fix does
-NOT shorten or end REPLAN early). But the wording itself was static
-regardless of steps_since_meaningful_change, so a window where the model
-recovered on its very first directed step showed a literally
-self-contradicting "No meaningful progress has been made for 0 steps" next
-to instructions to discard the (just-productive) route -- confirmed for
-real in 5/15 REPLAN windows (7 directive instances) in the 134-task
-sustained-only log. The body now branches on steps_since_meaningful_change
-(the same existing field, no new signal): > 0 keeps the original
-"no-progress, discard and replan" framing; == 0 switches to a
-"progress-observed, continue the productive route" framing that still
-carries the goal, the current observation, and an explicit prohibition on
-returning to the earlier no-progress action -- it never claims zero
-progress or tells the model to discard a route that just worked.
-
-REFLECT prompt-v3, admissible-action grounding (this workdir, 2026-08-13):
-REFLECT's directive now additionally carries the environment's own
-admissible-command list for the next step, when the caller supplies one.
-See _render_reflect()'s docstring for the full rationale, the practice-log
-evidence (42/42 failures contain inadmissible actions, 591 total, vs a
-median successful episode of 10.5 steps), and why this replaces the
-rejected REFLECT-v2 static-advice approach
-(audit_reports/ae_reflect_prompt_v2_rejected.md). VERIFY is unchanged,
-byte-for-byte, from v1; so is REFLECT's own v1 body text, which the v3
-listing is appended to rather than replacing.
+The directive is transiently inserted into the next model prompt and is not
+written to trajectory history. REFLECT may additionally show the current
+environment-provided admissible commands, sorted and capped at 40.
 """
 
 from __future__ import annotations
@@ -81,6 +23,18 @@ _STATIC_DIRECTIVES = {
         "Choose a corrected action from the current environment state."
     ),
 }
+
+_ALFWORLD_OUTPUT = (
+    "Respond with exactly two lines:\n"
+    "Thought: <state what needs checking and why>\n"
+    "Action: <one executable environment command>"
+)
+
+_ALFWORLD_REFLECT_OUTPUT = (
+    "Respond with exactly two lines:\n"
+    "Thought: <identify the problem and explain the correction>\n"
+    "Action: <one executable environment command>"
+)
 
 # REFLECT admissible-action grounding: cap on how many commands to list.
 # Real dev/practice environments expose ~15-40 admissible commands per step
@@ -160,80 +114,29 @@ def _render_reflect(*, admissible_commands) -> str:
 # and never fabricate a plausible-looking action/observation in its place.
 _NO_NONPROGRESS_ACTION = "(no non-progress action recorded this episode)"
 _NO_NONPROGRESS_OBSERVATION = "(no corresponding observation recorded this episode)"
-_NO_CURRENT_OBSERVATION = "(no observation recorded this episode)"
-_NO_TASK_TEXT = "(task text unavailable)"
-
 
 def _render_replan(
     *, goal: Optional[str], steps_since_meaningful_change: Optional[int],
     last_nonprogress_action: Optional[str], last_nonprogress_observation: Optional[str],
     current_observation: Optional[str],
 ) -> str:
-    task_description = goal.strip() if goal else _NO_TASK_TEXT
     action_text = last_nonprogress_action if last_nonprogress_action else _NO_NONPROGRESS_ACTION
-    nonprogress_obs_text = (
+    observation_text = (
         last_nonprogress_observation if last_nonprogress_observation else _NO_NONPROGRESS_OBSERVATION
     )
-    current_obs_text = current_observation if current_observation else _NO_CURRENT_OBSERVATION
     ssmc = steps_since_meaningful_change if steps_since_meaningful_change is not None else 0
-
-    if ssmc > 0:
-        status_line = f"No meaningful progress has been made for {ssmc} steps."
-        guidance_line = "Discard the current ineffective strategy and create a different route."
-        plan_bullets = (
-            "- restate the exact goal;\n"
-            "- give a different 2-4-subgoal route using A -> B -> C;\n"
-            "- explain why the next action differs from the most recent action with no observed progress."
-        )
-        subgoal_instruction = "the first subgoal"
-        bottom_prohibition = "Do not repeat the most recent action with no observed progress."
-    else:
-        # Real progress was registered on the step immediately before this
-        # directive was rendered (steps_since_meaningful_change reset to 0)
-        # -- REPLAN keeps showing for the rest of its patch_duration_steps
-        # window regardless (unchanged), but the wording must not claim
-        # zero progress or ask the model to discard a route that just
-        # worked. Two further precision fixes: (1) real call-sequence audit
-        # found the step that reset ssmc to 0 can occur BEFORE REPLAN
-        # actually finishes arming within that same step() call (arming
-        # happens after that step's own bookkeeping) -- "since REPLAN was
-        # activated" is therefore not always an accurate time reference, so
-        # this only claims what's directly observed: the latest step itself
-        # produced a change. (2) local_state_change_proxy>=0.5 only proves
-        # an observed state change happened, not that the resulting route
-        # is actually beneficial for the task -- the wording must not
-        # assert "productive" as a settled fact.
-        status_line = "The latest step produced an observed state change."
-        guidance_line = (
-            "Continue from the latest observation and do not discard the updated route "
-            "solely because REPLAN remains active."
-        )
-        plan_bullets = (
-            "- restate the exact goal;\n"
-            "- continue the current productive route with the next subgoal using A -> B -> C;\n"
-            "- explain why this next action follows from the latest observation, "
-            "not from the earlier no-progress action."
-        )
-        subgoal_instruction = "the next subgoal"
-        bottom_prohibition = "Do not return to the most recent action with no observed progress."
-
     return (
         "[ACTIVE CONTROL DIRECTIVE: REPLAN]\n"
-        "\n"
-        f"Original task: {task_description}\n"
-        f"{status_line}\n"
-        f"Most recent action with no observed progress: {action_text}\n"
-        f"Environment response to that action: {nonprogress_obs_text}\n"
-        f"Current observation: {current_obs_text}\n"
-        "\n"
-        f"{guidance_line}\n"
-        "\n"
-        "In one concise Thought line:\n"
-        f"{plan_bullets}\n"
-        "\n"
-        f"Then output exactly one executable Action line and execute only {subgoal_instruction}.\n"
-        f"{bottom_prohibition}\n"
-        "Do not assume any state that has not been observed."
+        f"No observed state change has occurred for {ssmc} steps.\n"
+        f"The most recent action without observed progress was {action_text}.\n"
+        f"The environment returned: {observation_text}\n"
+        "Revise the ineffective part of the current strategy.\n"
+        "Plan a route with 2-4 subgoals from the current observed state, "
+        "preserving any subgoals already completed.\n"
+        "Execute only the next unmet subgoal.\n"
+        "Respond with exactly two lines:\n"
+        "Thought: <give the revised route as A -> B -> C>\n"
+        "Action: <one executable environment command>"
     )
 
 
@@ -252,9 +155,10 @@ def render_directive(
             current_observation=current_observation,
         )
     if intervention == InterventionType.REFLECT:
-        return ("[ACTIVE CONTROL DIRECTIVE]\n"
-                + _render_reflect(admissible_commands=admissible_commands))
+        return ("[ACTIVE CONTROL DIRECTIVE: REFLECT]\n"
+                + _render_reflect(admissible_commands=admissible_commands)
+                + "\n" + _ALFWORLD_REFLECT_OUTPUT)
     body = _STATIC_DIRECTIVES.get(intervention)
     if body is None:
         return ""
-    return f"[ACTIVE CONTROL DIRECTIVE]\n{body}"
+    return f"[ACTIVE CONTROL DIRECTIVE: VERIFY]\n{body}\n{_ALFWORLD_OUTPUT}"

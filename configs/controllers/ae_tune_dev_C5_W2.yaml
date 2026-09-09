@@ -45,17 +45,17 @@ weights:
 
 hysteresis:
   uncertainty:
-    enter: 0.65
-    exit: 0.35
+    enter: 0.70
+    exit: 0.30
   frustration:
     enter: 0.70
-    exit: 0.40
+    exit: 0.30
   surprise:
-    enter: 0.60
+    enter: 0.70
     exit: 0.30
   confidence_low:
-    enter: 0.35
-    exit: 0.55
+    enter: 0.30
+    exit: 0.70
 
 controller:
   frustration_medium: 0.45

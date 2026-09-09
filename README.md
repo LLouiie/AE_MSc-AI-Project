@@ -1,113 +1,59 @@
-# [NeurIPS 2023] Reflexion: Language Agents with Verbal Reinforcement Learning
+# Artificial Emotion for Language Agents
 
-This repo holds the code, demos, and log files for [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366) by Noah Shinn, Federico Cassano, Edward Berman, Ashwin Gopinath, Karthik Narasimhan, Shunyu Yao. 
+This repository evaluates an Artificial Emotion (AE) controller for language agents in interactive environments. AE observes an agent trajectory, maintains four lightweight states (uncertainty, frustration, surprise, and confidence), and transiently injects a `VERIFY`, `REFLECT`, or `REPLAN` directive into the next ReAct prompt. The controller does not require training or an additional LLM call.
 
-![Reflexion RL diagram](./figures/reflexion_rl.png)
+The current experiments use ALFWorld and WebShop with ReAct, Reflexion, and ADaPT baselines. This project is built on the original [Reflexion](https://github.com/noahshinn/reflexion) repository.
 
-![Reflexion tasks](./figures/reflexion_tasks.png)
+## Repository structure
 
-We have released the LeetcodeHardGym [here](https://github.com/GammaTauAI/leetcode-hard-gym)
+- `ae/`: controller, signals, affect-state updates, baselines, and ALFWorld runner.
+- `alfworld_runs_ae/`: ALFWorld agent loop and environment integration.
+- `webshop_runs/`: WebShop environment adapter and evaluation runners.
+- `configs/controllers/`: AE controller and ablation configurations.
+- `configs/demos/`: one-shot demonstration selections.
+- `scripts/slurm/`: reproducible cluster job scripts.
 
-## To Run: reasoning (HotPotQA)
+## ALFWorld
 
-We have provided a set of notebooks to easily run, explore, and interact with the results of the reasoning experiments. Each experiment consists of a random sample of 100 questions from the HotPotQA distractor dataset. Each question in the sample is attempted by an agent with a specific type and reflexion strategy.
-
-### Setup
-
-To get started:
-
-1. Clone this repo and move to the HotPotQA directory:
-
-```bash
-git clone https://github.com/noahshinn/reflexion && cd ./hotpotqa_runs
-```
-
-2. Install the module dependencies into your environment:
+Start an OpenAI-compatible model server, then run:
 
 ```bash
-pip install -r requirements.txt
+python -m ae.runners.run_alfworld \
+  --baseline ae_full \
+  --split practice \
+  --run-name ae_example \
+  --ae-config configs/controllers/ae_full_final_nopir_v2_5.yaml \
+  --demo-config configs/demos/one_shot_v1.yaml \
+  --termination-policy legacy_early_stop \
+  --model Qwen/Qwen3-8B \
+  --base-url http://localhost:8000/v1
 ```
 
-3. Set `OPENAI_API_KEY` environment variable to your OpenAI API key:
+The full 134-task evaluation is split by task type and dataset partition. See `scripts/slurm/ae3_runs/run_ae_n20.sbatch` for the production launch procedure.
+
+## WebShop
+
+Start the WebShop environment and an OpenAI-compatible model server, then run:
 
 ```bash
-export OPENAI_API_KEY=<your key>
+cd webshop_runs
+python run_ae.py \
+  --num-envs 100 \
+  --ae-config ../configs/controllers/ae_full_final_nopir_v2_5.yaml \
+  --output webshop_ae.json
 ```
 
-#### Agent Types
+The environment setup assets are under `webshop_runs/setup/`.
 
-Agent type is determined by the notebook you choose to run. The available agent types include:
+## Ablations
 
-- `ReAct` - ReAct Agent
+The ALFWorld and WebShop runners share the same AE implementation and expose the following controller modes:
 
-- `CoT_context` - CoT Agent given supporting context about the question 
+- full AE
+- no trigger
+- random trigger
+- VERIFY only
+- REFLECT only
+- REPLAN only
 
-- `CoT_no_context` - CoT Agent given no supporting context about the question
-
-The notebook for each agent type is located in the `./hotpot_runs/notebooks` directory.
-
-#### Reflexion Strategies
-
-Each notebook allows you to specify the reflexion strategy to be used by the agents. The available reflexion strategies, which are defined in an `Enum`, include:
-
-- `ReflexionStrategy.NONE` - The agent is not given any information about its last attempt. 
-
-- `ReflexionStrategy.LAST_ATTEMPT` - The agent is given its reasoning trace from its last attempt on the question as context.
-
-- `ReflexionStrategy.REFLEXION` - The agent is given its self-reflection on the last attempt as context. 
-
-- `ReflexionStrategy.LAST_ATTEMPT_AND_REFLEXION` -  The agent is given both its reasoning trace and self-reflection on the last attempt as context.
-
-### To Run: decision-making (AlfWorld)
-
-Clone this repo and move to the AlfWorld directory
-
-```bash
-git clone https://github.com/noahshinn/reflexion && cd ./alfworld_runs
-```
-
-Specify the run parameters in `./run_reflexion.sh`.
-`num_trials`: number of iterative learning steps
-`num_envs`: number of task-environment pairs per trial
-`run_name`: the name for this run
-`use_memory`: use persisting memory to store self-reflections (turn off to run a baseline run)
-`is_resume`: use logging directory to resume a previous run
-`resume_dir`: the logging directory from which to resume the previous run
-`start_trial_num`: if resume run, then the trial number of which to start
-
-Run the trial
-
-```bash
-./run_reflexion.sh
-```
-
-The logs will be sent to `./root/<run_name>`.
-
-### Another Note
-
-Due to the nature of these experiments, it may not be feasible for individual developers to rerun the results as GPT-4 has limited access and significant API charges. All runs from the paper and additional results are logged in `./alfworld_runs/root` for decision-making, `./hotpotqa_runs/root` for reasoning, and `./programming_runs/root` for programming
-
-### Other Notes
-
-Check out the original implementation [here](https://github.com/noahshinn/reflexion-draft)
-
-Read one of the original blog posts [here](https://nanothoughts.substack.com/p/reflecting-on-reflexion)
-
-Check out an [Appl](https://github.com/appl-team/appl) implementation [here](https://github.com/appl-team/reppl/tree/main/reflexion).
-
-Check out an interesting type-prediction implementation here: [OpenTau](https://github.com/GammaTauAI/opentau)
-
-For all questions, contact [noahrshinn@gmail.com](noahrshinn@gmail.com)
-
-### Cite
-
-```bibtex
-@misc{shinn2023reflexion,
-      title={Reflexion: Language Agents with Verbal Reinforcement Learning}, 
-      author={Noah Shinn and Federico Cassano and Edward Berman and Ashwin Gopinath and Karthik Narasimhan and Shunyu Yao},
-      year={2023},
-      eprint={2303.11366},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI}
-}
-```
+Generated runs, logs, and result files are intentionally excluded from Git. Production outputs are stored separately from the source checkout.

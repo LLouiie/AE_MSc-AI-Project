@@ -273,7 +273,7 @@ def test_controller_directive_does_not_contaminate_parsing():
     agent = ALFWorldAgent(llm, controller=controller, termination_policy="fixed_horizon")
     agent.run(FakeEnv(), "put a mug in the sink", "put", to_print=False)
 
-    saw_directive_in_prompt = any("[ACTIVE CONTROL DIRECTIVE]" in p for p in llm.seen_prompts)
+    saw_directive_in_prompt = any("[ACTIVE CONTROL DIRECTIVE" in p for p in llm.seen_prompts)
     check("8. a directive was actually shown in some prompt", saw_directive_in_prompt)
     check("8b. no directive text leaked into any parsed_action",
           all("ACTIVE CONTROL DIRECTIVE" not in (s["parsed_action"] or "") for s in agent.step_log))

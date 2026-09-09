@@ -48,38 +48,45 @@ def _admissible(observation: str, page_type: str,
 def _webshop_directive(
     controller: StatefulController, goal: str, *, shopping_guidance: bool = True
 ) -> str:
-    """Render AE state using WebShop's one-command output protocol."""
+    """Render the active directive using WebShop wording and output format."""
     directive = controller.active_directive(goal=goal)
     if not directive:
         return ""
-    if shopping_guidance:
-        task_match = re.search(r"Instruction:\s*(.*?)\s*\[Search\]", goal, re.DOTALL)
-        shopping_task = task_match.group(1).strip() if task_match else goal.strip()
-        shopping_check = (
-            f"\nShopping task: {shopping_task}\n"
-            "Prioritize hard constraints: product type, required size or quantity, "
-            "required selectable options, and maximum price. Treat wording such as "
-            "prefer or would like as a preference when an exact match is unavailable. "
-            "Use the recent trajectory: do not repeat the same search query or the "
-            "same navigation loop. Make at most one materially different search or "
-            "one additional detail check for missing evidence. Then choose the "
-            "best-supported visible candidate; before click[Buy Now], select any "
-            "visible required options."
-        )
-        directive += shopping_check
-    if controller.active_patch_type == InterventionType.REPLAN:
-        directive = directive.split("In one concise Thought line:", 1)[0].rstrip()
-        directive += (
-            "\nChoose a different short route internally, then execute only its "
-            "next subgoal. Return exactly one WebShop command: search[query], "
-            "click[visible target], or think[short note]. Do not output a "
-            "Thought: or Action: prefix."
+    is_replan = controller.active_patch_type == InterventionType.REPLAN
+    directive = directive.split("\nRespond with exactly two lines:", 1)[0].rstrip()
+    if is_replan:
+        directive = directive.replace(
+            "Execute only the next unmet subgoal.",
+            "Consider the route internally and execute only the next unmet subgoal.",
         )
     else:
-        directive += (
-            "\nReturn exactly one WebShop command and no explanation. Do not "
-            "output a Thought: or Action: prefix."
-        )
+        if controller.active_patch_type == InterventionType.REFLECT:
+            directive = directive.replace(
+                "Diagnose why the recent actions did not change the environment.",
+                "Diagnose why the recent actions did not change the page or provide useful information.",
+            ).replace(
+                "Choose a corrected action from the current environment state.",
+                "Choose a corrected action from the current page state.",
+            )
+        if shopping_guidance:
+            task_match = re.search(r"Instruction:\s*(.*?)\s*\[Search\]", goal, re.DOTALL)
+            shopping_task = task_match.group(1).strip() if task_match else goal.strip()
+            directive += (
+                f"\nShopping task: {shopping_task}\n"
+                "Prioritize hard constraints: product type, required size or quantity, "
+                "required selectable options, and maximum price. Treat wording such as "
+                "prefer or would like as a preference when an exact match is unavailable. "
+                "Use the recent trajectory: do not repeat the same search query or the "
+                "same navigation loop. Make at most one materially different search or "
+                "one additional detail check for missing evidence. Then choose the "
+                "best-supported visible candidate; before click[Buy Now], select any "
+                "visible required options."
+            )
+    directive += (
+        "\nReturn exactly one WebShop command:\n"
+        "search[query], click[visible target], or think[short note].\n"
+        "Do not output a Thought: or Action: prefix or any extra text."
+    )
     return directive
 
 

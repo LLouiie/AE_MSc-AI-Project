@@ -139,6 +139,9 @@ runs/
 __pycache__/
 *.pyc
 
+# Generated experiment outputs
+results/
+
 # Generated analysis artifacts (produced by analysis/trajectory_analysis.py)
 hotpotqa_runs/analysis/report.md
 hotpotqa_runs/analysis/step_features.csv

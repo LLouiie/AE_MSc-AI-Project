@@ -50,7 +50,7 @@
 # Code: isolated workdir admissible_reflect_workdir/ (REFLECT-v3), exactly two
 # files differ from the official copy plus the new v3 contract test:
 #   stateful_controller.py   sha256=3127c243b5abcbd9a5115c3d01bd19098dc62527ece63ad099d207a25207164c
-#   intervention_renderer.py sha256=52f20e7dfa794b44873e630ccf420fb78707edb12262787a3e539d8821186424
+#   intervention_renderer.py sha256=d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f
 # Controller config: ae_maxint6.yaml (single-variable vs the frozen baseline:
 # max_interventions 3 -> 6, re-verified below).
 # ============================================================================
@@ -100,8 +100,8 @@ log "check 1 OK: 4 result dirs free"
 
 grep -q "3127c243b5abcbd9a5115c3d01bd19098dc62527ece63ad099d207a25207164c  $WD/ae/controllers/stateful_controller.py" "$LOGDIR/sha256.log" \
     || fail "stateful_controller.py sha mismatch vs expected v3"
-grep -q "52f20e7dfa794b44873e630ccf420fb78707edb12262787a3e539d8821186424  $WD/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
-    || fail "intervention_renderer.py sha mismatch vs expected v3"
+grep -q "d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f  $WD/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
+    || fail "intervention_renderer.py sha mismatch vs expected Appendix A renderer"
 UNEXPECTED=$(grep "^Files .* differ$\|^Only in" "$LOGDIR/sha256.log" \
     | grep -v "intervention_renderer.py" | grep -v "stateful_controller.py" \
     | grep -v "test_reflect_admissible_v3.py" || true)

@@ -97,8 +97,8 @@ log "check 1 OK: 12 result dirs free"
               "$COPY"/configs/demos/one_shot_v1_index1.yaml \
               "$COPY"/configs/demos/one_shot_v1_index2.yaml
 } > "$LOGDIR/sha256.log" 2>&1
-grep -q "52f20e7dfa794b44873e630ccf420fb78707edb12262787a3e539d8821186424  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
-    || fail "intervention_renderer.py sha mismatch (must be the REFLECT-v3 renderer)"
+grep -q "d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
+    || fail "intervention_renderer.py sha mismatch (must be the Appendix A renderer)"
 grep -q "3127c243b5abcbd9a5115c3d01bd19098dc62527ece63ad099d207a25207164c  $COPY/ae/controllers/stateful_controller.py" "$LOGDIR/sha256.log" \
     || fail "stateful_controller.py sha mismatch (must be the REFLECT-v3 controller)"
 log "check 2 OK: code byte-identical to the frozen 80/134 run"

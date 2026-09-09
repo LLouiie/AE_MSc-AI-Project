@@ -93,7 +93,7 @@ log "check 1 OK: 3 result dirs free"
 
 grep -q "f0b53c9bf5180f2714c122c8abc49dde7726b708cbcd8d47fa2d73f57f94908d  $WD/ae/controllers/stateful_controller.py" "$LOGDIR/sha256.log" \
     || fail "stateful_controller.py sha mismatch vs expected sustained-only version -- see $LOGDIR/sha256.log"
-grep -q "c4824c0606a87eedc32aa96564c9ddcedafc1fd11a7b212a3131382fe43367ba  $WD/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
+grep -q "d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f  $WD/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
     || fail "intervention_renderer.py sha mismatch -- see $LOGDIR/sha256.log"
 DIFF_NONCONTROLLER=$(grep "^Files .* differ$\|^Only in" "$LOGDIR/sha256.log" | grep -v "stateful_controller.py" || true)
 if [ -n "$DIFF_NONCONTROLLER" ]; then

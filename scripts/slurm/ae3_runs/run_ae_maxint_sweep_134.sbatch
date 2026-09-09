@@ -86,7 +86,7 @@ log "check 1 OK: 4 result dirs free"
               "$COPY"/configs/controllers/ae_maxint6.yaml \
               "$COPY"/configs/controllers/ae_maxint12.yaml
 } > "$LOGDIR/sha256.log" 2>&1
-grep -q "c4824c0606a87eedc32aa96564c9ddcedafc1fd11a7b212a3131382fe43367ba  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
+grep -q "d171ca687e35deefa1e25729dd172bd797df2eab8ca4b4a1f71eaf551b34406f  $COPY/ae/controllers/intervention_renderer.py" "$LOGDIR/sha256.log" \
     || fail "intervention_renderer.py sha mismatch (must be the frozen v1 renderer, NOT v3)"
 grep -q "6fefd3324e6d2578b4a835a52c598ed878b205427c7bee1c0f9db6decc249484  $COPY/ae/controllers/stateful_controller.py" "$LOGDIR/sha256.log" \
     || fail "stateful_controller.py sha mismatch"

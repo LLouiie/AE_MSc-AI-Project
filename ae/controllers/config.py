@@ -95,11 +95,11 @@ class AEConfig:
     ))
 
     # ---- hysteresis bands ----
-    uncertainty_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.65, 0.35))
-    frustration_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.70, 0.40))
-    surprise_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.60, 0.30))
+    uncertainty_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.70, 0.30))
+    frustration_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.70, 0.30))
+    surprise_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.70, 0.30))
     # Confidence hysteresis is inverted (LOW is the abnormal band).
-    confidence_low_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.35, 0.55))
+    confidence_low_hysteresis: HysteresisBand = field(default_factory=lambda: HysteresisBand(0.30, 0.70))
 
     # ---- controller thresholds ----
     frustration_medium: float = 0.45

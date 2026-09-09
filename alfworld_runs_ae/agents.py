@@ -1,8 +1,7 @@
 import os, sys, json
 from typing import List, Optional, Tuple
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'hotpotqa_runs'))
-from llm import AnyOpenAILLM
+from ae.llm_client import AnyOpenAILLM
 from openai import BadRequestError
 
 from environment import process_ob, get_task_type

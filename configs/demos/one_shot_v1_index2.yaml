@@ -11,8 +11,7 @@
 # Why index 2 at all: heat/cool/puttwo/examine's index-0 choice was a
 # PRE-REGISTERED EXTRAPOLATION, not ReflAct-confirmed -- the paper prints no
 # one-shot example for those four types anywhere in its 33 pages. Index 1
-# was tested for them in the demo-selection ablation (tasks #74-#78,
-# audit_reports/ae_oneshot_demo_selection_ablation_report.md); index 2 is
+# Index 2 is
 # the remaining untested option in alfworld_3prompts.json (react_{type}_2),
 # and has never been run for any type in this project.
 #

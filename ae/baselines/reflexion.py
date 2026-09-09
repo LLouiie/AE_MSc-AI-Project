@@ -5,7 +5,7 @@ rules_text pinned to "" so no RulePool/consolidation import is ever touched
 (that pipeline is legacy as of legacy/rule-library-2026-07-25, see
 AE_MIGRATION_AUDIT.md). Core mechanism verified against Shinn et al. 2023,
 arXiv:2303.11366: reflect-on-failure, inject reflections into next trial's
-prompt, stop at max_trials or first success — see BASELINE_RESEARCH.md
+prompt, stop at max_trials or first success.
 section 6. Adapted reproduction (different LLM backend), not exact; and not
 the same code that produced the thesis's existing HotpotQA Reflexion number
 (that one is AE/baselines/reflexion, the official langchain fork).

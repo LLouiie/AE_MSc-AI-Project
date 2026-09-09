@@ -2,8 +2,7 @@
 
 Thin wrapper around alfworld_runs_ae/agents.py::ALFWorldAgent, which already
 implements the paper's Thought/Action/Observation loop (Yao et al. 2022,
-arXiv:2210.03629) against our own AnyOpenAILLM/vLLM backend — see
-BASELINE_RESEARCH.md section 6 for the paper-vs-code consistency check.
+arXiv:2210.03629) against our own AnyOpenAILLM/vLLM backend.
 Adapted reproduction (different LLM backend / no notebook), not exact.
 """
 

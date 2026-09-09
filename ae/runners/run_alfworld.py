@@ -1,9 +1,7 @@
-"""Unified ALFWorld pilot entry point (Stage 7 of AE_MIGRATION_AUDIT.md).
+"""Unified ALFWorld runner for ReAct, Reflexion, and AE.
 
-Bare single-episode loop per task, no RulePool/scheduler — mirrors
-hotpotqa_runs/run_episode.py's "no inter-episode state" design. Each
-baseline is dispatched behind the same CLI/logging/checkpoint contract so
-runs are directly comparable.
+Each baseline shares the same task selection, prompt, logging, and checkpoint
+contract so runs are directly comparable.
 
 Usage (from repo root, reflexion_hotpot / alfworld035 conda env):
     python -m ae.runners.run_alfworld \
@@ -39,10 +37,6 @@ from agents import (  # noqa: E402
 from demo_config import load_demo_config  # noqa: E402
 
 IMPLEMENTED_BASELINES = {"react", "reflexion", "ae_full"}
-# fixed_interval / stateless_trigger / ae_no_hysteresis: interface reserved
-# (see ae/controllers/config.py::AEConfig.mode docstring), not implemented
-# this pass per the task spec ("第一轮优先保证 react 和 ae_full 可运行").
-PLANNED_BASELINES = {"adapt", "reflact", "reflexgrad", "fixed_interval", "stateless_trigger", "ae_no_hysteresis"}
 
 
 def build_llms(model: str, base_url: str):
@@ -57,7 +51,7 @@ def build_llms(model: str, base_url: str):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--baseline", required=True,
-                    choices=sorted(IMPLEMENTED_BASELINES | PLANNED_BASELINES))
+                    choices=sorted(IMPLEMENTED_BASELINES))
     p.add_argument("--split", choices=["practice", "exam"], default="practice")
     p.add_argument("--run-name", required=True)
     p.add_argument("--limit", type=int, default=None)
@@ -91,12 +85,6 @@ def main():
     p.add_argument("--base-url", default=os.getenv("OPENAI_BASE_URL", "http://localhost:8000/v1"))
     p.add_argument("--output-dir", default=os.path.join(os.path.dirname(__file__), "runs"))
     args = p.parse_args()
-
-    if args.baseline in PLANNED_BASELINES:
-        raise SystemExit(
-            f"--baseline {args.baseline} is scaffolded but not implemented yet "
-            f"(see BASELINE_RESEARCH.md). Implemented: {sorted(IMPLEMENTED_BASELINES)}"
-        )
 
     random.seed(args.seed)
 

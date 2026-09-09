@@ -1,4 +1,4 @@
-"""Same JSONL-append + config.json-snapshot pattern as hotpotqa_runs/run_episode.py,
+"""JSONL append and config snapshot helpers,
 reused so every ae/ baseline produces directly comparable run directories.
 """
 

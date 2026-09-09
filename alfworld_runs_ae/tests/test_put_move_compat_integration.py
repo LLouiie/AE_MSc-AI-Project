@@ -30,7 +30,6 @@ Run directly:
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "hotpotqa_runs"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # alfworld_runs_ae
 
@@ -67,8 +66,7 @@ class FakeLLMScripted:
 
 class FakeEnv:
     """admissible_commands only ever lists the "move ..." phrasing (mirrors
-    the real ALFWorld json_2.1.1 PutObject grammar confirmed in this repo's
-    audit_reports/AE_CONTROLLER_AUDIT_2026-07-31.md) -- so a step is only
+    the real ALFWorld json_2.1.1 PutObject grammar -- so a step is only
     reported admissible, and only "succeeds", if the environment actually
     received "move X to Y", never "put X in/on Y"."""
     def __init__(self, n_steps_until_done=999):

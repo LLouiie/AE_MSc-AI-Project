@@ -2,7 +2,7 @@
 
 StepContext is what a baseline hands to a controller after each environment
 step; InterventionDecision is what the controller hands back. Every baseline
-(react, reflexion, adapt, reflact, reflexgrad, ae) must be able to run behind
+(react, reflexion, ae) must be able to run behind
 this same interface so comparisons stay apples-to-apples per-baseline
 intervention/token accounting.
 """

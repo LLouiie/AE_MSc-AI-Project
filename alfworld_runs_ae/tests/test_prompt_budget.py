@@ -14,7 +14,6 @@ Run directly:
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "hotpotqa_runs"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # alfworld_runs_ae
 

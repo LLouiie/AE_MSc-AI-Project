@@ -1,5 +1,4 @@
-"""Tests for the REPLAN sustained-evidence gate (see audit_reports/
-ae_reflect_replan_formula_redesign*.md).
+"""Tests for the REPLAN sustained-evidence gate.
 
 Only ONE routing judgment changed in _select_intervention(): the
 frustration_high+confidence_low branch no longer returns REPLAN

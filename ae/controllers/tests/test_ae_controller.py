@@ -1,6 +1,5 @@
 """Lightweight assert-based tests for the AE controller (no pytest — this
-repo's existing convention is plain script + assert, e.g.
-hotpotqa_runs/test_inject.py). Run directly:
+repository convention is a plain script with assertions). Run directly:
 
     python3 ae/controllers/tests/test_ae_controller.py
 
@@ -123,7 +122,7 @@ def test_surprise_decays_faster():
 def test_hysteresis_no_flicker():
     cfg = AEConfig()
     tracker = HysteresisTracker()
-    band = cfg.frustration_hysteresis  # enter=0.70, exit=0.40
+    band = cfg.frustration_hysteresis  # enter=0.70, exit=0.30
     # Oscillate frustration between just-above-enter and just-below-enter
     # (but above exit) — a naive single-threshold check would flip on
     # every step; hysteresis should stay latched "active" throughout.
@@ -140,7 +139,7 @@ def test_hysteresis_no_flicker():
           flips == 0 and was_active is True, f"flips={flips}, final_active={was_active}")
 
     # Now actually drop below exit -> should deactivate exactly once.
-    state = AffectState(uncertainty=0.0, frustration=0.35, surprise=0.0, confidence=1.0)
+    state = AffectState(uncertainty=0.0, frustration=0.25, surprise=0.0, confidence=1.0)
     tracker.update(state, cfg)
     check("5b. drops out of high band once below exit threshold", tracker.frustration_active is False)
 

@@ -8,8 +8,7 @@ module (no cross-repo import, no sys.path reach-out) per the instruction
 not to create a runtime dependency on another project's checkout.
 
 Root cause (identical in both projects, confirmed against this repo's own
-audit_reports/AE_CONTROLLER_AUDIT_2026-07-31.md and a fresh read-only log
-scan): alfworld_3prompts.json's few-shot examples teach the model to say
+a prior trajectory audit and a fresh read-only log scan): alfworld_3prompts.json's few-shot examples teach the model to say
 "put {obj} in/on {recep}", but the ALFWorld data release actually in use
 here ($ALFWORLD_DATA/json_2.1.1) compiles every game file's PutObject
 admissible-command template as "move {o} to {r}" instead. A literal

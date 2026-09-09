@@ -50,8 +50,7 @@ def _render_reflect(*, admissible_commands) -> str:
     caller supplied them -- the environment's own admissible-command list
     for the next step.
 
-    Why this and not more static advice (see
-    audit_reports/ae_reflect_prompt_v2_rejected.md): REFLECT-v2 tried a
+    Why this and not more static advice: REFLECT-v2 tried a
     static line telling the model what "Nothing happens." usually means.
     It failed, because the correct recovery is task-type-dependent and
     sometimes semantically opposite (examine: stop re-navigating and

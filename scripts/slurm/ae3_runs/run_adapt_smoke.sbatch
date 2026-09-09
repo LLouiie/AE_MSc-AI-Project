@@ -52,6 +52,7 @@ NODE_TMP=${SLURM_TMPDIR:-/tmp/ae3_${USER}_${SLURM_JOB_ID}}
 LOCAL_MODEL=$NODE_TMP/Qwen3-8B
 
 MODEL=Qwen/Qwen3-8B
+EXECUTOR=${EXECUTOR:-hybrid}
 RUN_FULL=${RUN_FULL:-0}
 case "${SLURM_JOB_NAME:-}" in
     adapt_full*) RUN_FULL=1 ;;
@@ -98,10 +99,9 @@ log "ALFWORLD_DATA=$ALFWORLD_DATA"
 
 cd "$ADAPT" || fail "cannot cd into $ADAPT"
 
-# run_alfworld.py builds dest_file as './results/comparison/{LM}/{fname}_{LM}.json'
-# and LM contains a '/', so the *filename* itself contains a slash and its
-# parent directory has to exist before open(...,'w+') is called.
-DEST_DIR="./results/comparison/${MODEL%%/*}/${MODEL##*/}/${FNAME}_${MODEL%%/*}"
+# Keep persistent outputs off the quota-limited home filesystem.
+RESULTS_ROOT="/vol/gpudata/jy625-ae-data/results/adapt_smoke_${SLURM_JOB_ID}"
+DEST_DIR="$RESULTS_ROOT/${MODEL%%/*}/${MODEL##*/}/${FNAME}_${MODEL%%/*}"
 mkdir -p "$DEST_DIR"
 log "results will land in $DEST_DIR"
 
@@ -111,6 +111,10 @@ source /vol/gpudata/jy625-ae-data/ae3-venv/bin/activate
 # shard reads and mmap activity against node-local storage. Staging is kept
 # outside the readiness deadline because CEPH throughput can fall below 10 MB/s.
 mkdir -p "$NODE_TMP" || fail "cannot create node-local staging dir $NODE_TMP"
+export XDG_CACHE_HOME="$NODE_TMP/cache"
+export VLLM_CACHE_ROOT="$NODE_TMP/vllm_cache"
+export TORCHINDUCTOR_CACHE_DIR="$NODE_TMP/torchinductor_cache"
+mkdir -p "$XDG_CACHE_HOME" "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" || fail "cannot create node-local compile caches"
 avail_kb=$(df -Pk "$NODE_TMP" | awk 'NR==2 {print $4}')
 [ "${avail_kb:-0}" -ge 20971520 ] || fail "less than 20 GiB free in $NODE_TMP"
 log "staging model from CEPH to $LOCAL_MODEL"
@@ -142,9 +146,10 @@ log "vLLM ready, OPENAI_BASE_URL=$OPENAI_BASE_URL"
     --LM "$MODEL" --exec-LM "$MODEL" \
     --eval-type ood \
     "${TASK_ARGS[@]}" \
-    --executor react --react-type oneshot \
+    --executor "$EXECUTOR" --react-type oneshot \
     --max-depth 3 --max-runs 20 \
     --fname "$FNAME" \
+    --results-root "$RESULTS_ROOT" \
     --verbose True \
     > "$LOGDIR/run.log" 2>&1
 rc=$?
@@ -153,7 +158,7 @@ kill "$VLLM_PID" 2>/dev/null; VLLM_PID=""
 
 "$PY" - <<PYEOF 2>&1 | tee "$LOGDIR/RESULT.txt"
 import json, glob
-hits = glob.glob("$ADAPT/results/comparison/Qwen/Qwen3-8B/${FNAME}_Qwen/Qwen3-8B.json")
+hits = glob.glob("$RESULTS_ROOT/Qwen/Qwen3-8B/${FNAME}_Qwen/Qwen3-8B.json")
 assert hits, "no result file written"
 d = json.load(open(hits[0]))
 o = d["overall"]

@@ -40,11 +40,12 @@ IMPLEMENTED_BASELINES = {"react", "reflexion", "ae_full"}
 
 
 def build_llms(model: str, base_url: str):
+    api_key = os.getenv("OPENAI_API_KEY", "EMPTY")
     act_llm = AnyOpenAILLM(temperature=0, max_tokens=ACT_MAX_TOKENS, model_name=model,
                             model_kwargs={"stop": ACT_STOP},
-                            openai_api_key="EMPTY", openai_api_base=base_url)
+                            openai_api_key=api_key, openai_api_base=base_url)
     reflect_llm = AnyOpenAILLM(temperature=0, max_tokens=300, model_name=model,
-                                openai_api_key="EMPTY", openai_api_base=base_url)
+                                openai_api_key=api_key, openai_api_base=base_url)
     return act_llm, reflect_llm
 
 

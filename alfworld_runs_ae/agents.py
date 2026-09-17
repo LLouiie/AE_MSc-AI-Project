@@ -72,16 +72,28 @@ _TOKENIZERS: dict = {}
 def _get_tokenizer(model_name: str):
     tok = _TOKENIZERS.get(model_name)
     if tok is None:
-        from transformers import AutoTokenizer
-        tok = AutoTokenizer.from_pretrained(model_name)
+        if model_name.startswith("gpt-"):
+            import tiktoken
+            try:
+                tok = tiktoken.encoding_for_model(model_name)
+            except KeyError:
+                # New dotted aliases such as gpt-5.4 are not present in
+                # older tiktoken model maps. GPT-5 uses o200k_base.
+                tok = tiktoken.get_encoding("o200k_base")
+        else:
+            from transformers import AutoTokenizer
+            tokenizer_name = os.getenv("ALFWORLD_TOKENIZER_NAME_OR_PATH", model_name)
+            tok = AutoTokenizer.from_pretrained(tokenizer_name)
         _TOKENIZERS[model_name] = tok
     return tok
 
 
 def count_tokens(text: str, model_name: str) -> int:
-    """Exact input token count via the model's own tokenizer -- not an
-    estimate -- so the truncation loops below can check the real budget
-    before every request, not guess from character counts."""
+    """Count prompt-text tokens with the backend model.s tokenizer.
+
+    Chat-message framing is covered by ``PROMPT_SAFETY_MARGIN``; the shared
+    context budget and deterministic truncation policy stay unchanged.
+    """
     return len(_get_tokenizer(model_name).encode(text))
 
 

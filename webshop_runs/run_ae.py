@@ -90,14 +90,21 @@ def _webshop_directive(
     return directive
 
 
-def _build_model_prompt(prompt: str, directive: str) -> str:
-    """Keep the WebShop output cue last, including while AE is active."""
+def _build_model_prompt(prompt: str, directive: str, goal: str) -> str:
+    """Keep the task and output cue while trimming the oldest trajectory."""
     if directive:
         action_cue = "\n\nAction:"
         if not prompt.endswith(action_cue):
             raise ValueError("WebShop trajectory must end with an Action cue")
         prompt = prompt[:-len(action_cue)] + f"\n\n{directive}{action_cue}"
-    return BASE_PROMPT + prompt[-(6400 - len(BASE_PROMPT)):]
+    trajectory_budget = 6400 - len(BASE_PROMPT)
+    if len(prompt) <= trajectory_budget:
+        return BASE_PROMPT + prompt
+    task_prefix = f"{goal}\n\n"
+    history_budget = trajectory_budget - len(task_prefix)
+    if history_budget <= 0:
+        raise ValueError("WebShop task exceeds the prompt budget")
+    return BASE_PROMPT + task_prefix + prompt[-history_budget:]
 
 
 
@@ -134,7 +141,7 @@ def run_episode(
         directive = _webshop_directive(
             controller, goal, shopping_guidance=shopping_guidance
         )
-        model_prompt = _build_model_prompt(prompt, directive)
+        model_prompt = _build_model_prompt(prompt, directive, goal)
         action = llm(model_prompt, stop=["\n"]).lstrip(" ")
         page_before = env.sessions[session]["page_type"]
         admissible_before = _admissible(

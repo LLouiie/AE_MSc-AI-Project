@@ -16,9 +16,15 @@ def test_type_restrictions():
     replan = StatefulController(AEConfig(), ablation_mode="replan_only")
     verify = StatefulController(AEConfig(), ablation_mode="verify_only")
     for intervention in (InterventionType.VERIFY, InterventionType.REFLECT, InterventionType.REPLAN):
-        assert reflect._apply_type_ablation(intervention) == InterventionType.REFLECT
-        assert replan._apply_type_ablation(intervention) == InterventionType.REPLAN
-        assert verify._apply_type_ablation(intervention) == InterventionType.VERIFY
+        assert reflect._apply_type_ablation(intervention) == (
+            intervention if intervention == InterventionType.REFLECT else InterventionType.CONTINUE
+        )
+        assert replan._apply_type_ablation(intervention) == (
+            intervention if intervention == InterventionType.REPLAN else InterventionType.CONTINUE
+        )
+        assert verify._apply_type_ablation(intervention) == (
+            intervention if intervention == InterventionType.VERIFY else InterventionType.CONTINUE
+        )
 
 
 def test_random_schedule_is_seeded():

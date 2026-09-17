@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from bs4.element import Comment
 from env_history import EnvironmentHistory
 from action_parser import parse_webshop_action
+from ae.llm_client import chat_completion_params
 
 from typing import Any, Dict, List, Tuple
  
@@ -37,8 +38,9 @@ def llm(prompt, stop=["\n"]):
     try:
         cur_try = 0
         while cur_try < 6:
-            response = client.chat.completions.create(
+            response = client.chat.completions.create(**chat_completion_params(
                 model=DEFAULT_MODEL,
+                base_url=BASE_URL,
                 messages=[
                     {"role": "system", "content": ACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -46,8 +48,7 @@ def llm(prompt, stop=["\n"]):
                 temperature=0.0,
                 max_tokens=100,
                 stop=stop,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-            )
+            ))
             text = parse_webshop_action(response.choices[0].message.content)
             # dumb way to do this
             if len(text.strip()) >= 5:

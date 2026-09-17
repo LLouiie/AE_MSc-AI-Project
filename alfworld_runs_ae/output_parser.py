@@ -49,7 +49,7 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from ae.controllers.canonical_action import canonicalize_action  # noqa: E402
+from ae.controllers.canonical_action import canonicalize_action, clean_action_text as canonical_clean_action_text  # noqa: E402
 
 _THOUGHT_RE = re.compile(r"^\s*thought\s*:\s*(.*)$", re.IGNORECASE)
 _ACTION_RE = re.compile(r"^\s*action\s*:\s*(.*)$", re.IGNORECASE)
@@ -70,7 +70,7 @@ def _clean_action_text(text: str) -> str:
         text = _LEGACY_CARET_RE.sub("", text)
         text = _LEADING_ENUM_RE.sub("", text)
         text = text.strip()
-    return text
+    return canonical_clean_action_text(text)
 
 
 def _normalize_for_match(text: str) -> str:

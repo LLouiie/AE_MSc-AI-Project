@@ -47,11 +47,16 @@ export HF_HOME=/vol/gpudata/jy625-ae-data/hf_cache
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export ALFWORLD_DATA=/vol/gpudata/jy625-ae-data/alfworld_data
 
-MODEL_SOURCE=/vol/gpudata/jy625-ae-data/models/Qwen3-8B
+MODEL_SOURCE=${1:-/vol/gpudata/jy625-ae-data/models/Qwen3-8B}
 NODE_TMP=${SLURM_TMPDIR:-/tmp/ae3_${USER}_${SLURM_JOB_ID}}
-LOCAL_MODEL=$NODE_TMP/Qwen3-8B
+MODEL=${2:-Qwen/Qwen3-8B}
+USE_SHARED_MODEL=${3:-0}
+if [ "$USE_SHARED_MODEL" = "1" ]; then
+    LOCAL_MODEL=$MODEL_SOURCE
+else
+    LOCAL_MODEL=$NODE_TMP/${MODEL##*/}
+fi
 
-MODEL=Qwen/Qwen3-8B
 EXECUTOR=${EXECUTOR:-hybrid}
 RUN_FULL=${RUN_FULL:-0}
 case "${SLURM_JOB_NAME:-}" in
@@ -115,19 +120,26 @@ export XDG_CACHE_HOME="$NODE_TMP/cache"
 export VLLM_CACHE_ROOT="$NODE_TMP/vllm_cache"
 export TORCHINDUCTOR_CACHE_DIR="$NODE_TMP/torchinductor_cache"
 mkdir -p "$XDG_CACHE_HOME" "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" || fail "cannot create node-local compile caches"
-avail_kb=$(df -Pk "$NODE_TMP" | awk 'NR==2 {print $4}')
-[ "${avail_kb:-0}" -ge 20971520 ] || fail "less than 20 GiB free in $NODE_TMP"
-log "staging model from CEPH to $LOCAL_MODEL"
-stage_start=$(date +%s)
-cp -a "$MODEL_SOURCE" "$LOCAL_MODEL" || fail "model staging failed"
-stage_seconds=$(( $(date +%s) - stage_start ))
-log "model staged locally in ${stage_seconds}s"
+if [ "$USE_SHARED_MODEL" != "1" ]; then
+    avail_kb=$(df -Pk "$NODE_TMP" | awk 'NR==2 {print $4}')
+    [ "${avail_kb:-0}" -ge 20971520 ] || fail "less than 20 GiB free in $NODE_TMP"
+fi
+if [ "$USE_SHARED_MODEL" = "1" ]; then
+    log "using shared model snapshot $LOCAL_MODEL"
+else
+    log "staging model from CEPH to $LOCAL_MODEL"
+    stage_start=$(date +%s)
+    cp -a "$MODEL_SOURCE" "$LOCAL_MODEL" || fail "model staging failed"
+    stage_seconds=$(( $(date +%s) - stage_start ))
+    log "model staged locally in ${stage_seconds}s"
+fi
 
 PORT=$(( 8200 + (SLURM_JOB_ID % 600) ))
 curl -s -o /dev/null -m 3 "http://localhost:${PORT}/v1/models" 2>/dev/null && fail "port ${PORT} busy"
 log "starting vLLM on ${PORT}"
 vllm serve "$LOCAL_MODEL" \
     --served-model-name "$MODEL" --port "${PORT}" --host 0.0.0.0 \
+    --dtype half --max-model-len 40960 \
     > "$LOGDIR/vllm_server.log" 2>&1 &
 VLLM_PID=$!
 export OPENAI_BASE_URL="http://localhost:${PORT}/v1"
@@ -158,7 +170,9 @@ kill "$VLLM_PID" 2>/dev/null; VLLM_PID=""
 
 "$PY" - <<PYEOF 2>&1 | tee "$LOGDIR/RESULT.txt"
 import json, glob
-hits = glob.glob("$RESULTS_ROOT/Qwen/Qwen3-8B/${FNAME}_Qwen/Qwen3-8B.json")
+hits = glob.glob("$RESULTS_ROOT/**/*${FNAME}*/**/*.json", recursive=True)
+if not hits:
+    hits = glob.glob("$RESULTS_ROOT/**/${FNAME}_*.json", recursive=True)
 assert hits, "no result file written"
 d = json.load(open(hits[0]))
 o = d["overall"]

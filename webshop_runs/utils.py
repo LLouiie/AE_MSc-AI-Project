@@ -1,5 +1,6 @@
 import os
 from openai import OpenAI
+from ae.llm_client import chat_completion_params
 from tenacity import (
     retry,
     stop_after_attempt, # type: ignore
@@ -18,22 +19,22 @@ def get_completion(prompt: Union[str, List[str]], max_tokens: int = 256, stop_st
     assert (not is_batched and isinstance(prompt, str)) or (is_batched and isinstance(prompt, list))
     if is_batched:
         return [
-            client.chat.completions.create(
+            client.chat.completions.create(**chat_completion_params(
                 model=DEFAULT_MODEL,
+                base_url=BASE_URL,
                 messages=[{"role": "user", "content": item}],
                 temperature=0.0,
                 max_tokens=max_tokens,
                 stop=stop_strs,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-            ).choices[0].message.content
+            )).choices[0].message.content
             for item in prompt
         ]
-    response = client.chat.completions.create(
+    response = client.chat.completions.create(**chat_completion_params(
         model=DEFAULT_MODEL,
+        base_url=BASE_URL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.0,
         max_tokens=max_tokens,
         stop=stop_strs,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-    )
+    ))
     return response.choices[0].message.content

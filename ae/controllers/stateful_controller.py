@@ -348,7 +348,10 @@ class StatefulController:
 
             budget_available = self.intervention_count < self.config.max_interventions
             if active_type_before == InterventionType.VERIFY:
-                if budget_available:
+                if self._apply_type_ablation(InterventionType.REFLECT) == InterventionType.CONTINUE:
+                    intervention, transition = InterventionType.CONTINUE, "VERIFY->CONTINUE(type_ablated)"
+                    reason = "post-verify escalation to reflect disabled by type ablation"
+                elif budget_available:
                     self._arm_intervention(InterventionType.REFLECT, escalated_from=InterventionType.VERIFY.value)
                     intervention, transition = InterventionType.REFLECT, "VERIFY->REFLECT"
                     reason = "post-intervention exact repeat during active verify -> escalating to reflect"
@@ -358,7 +361,10 @@ class StatefulController:
                     reason = ("post-intervention exact repeat during active verify, but "
                               f"max_interventions reached ({self.config.max_interventions}) -> terminating")
             elif active_type_before == InterventionType.REFLECT:
-                if budget_available:
+                if self._apply_type_ablation(InterventionType.REPLAN) == InterventionType.CONTINUE:
+                    intervention, transition = InterventionType.CONTINUE, "REFLECT->CONTINUE(type_ablated)"
+                    reason = "post-reflect escalation to replan disabled by type ablation"
+                elif budget_available:
                     self._arm_intervention(InterventionType.REPLAN, escalated_from=InterventionType.REFLECT.value)
                     intervention, transition = InterventionType.REPLAN, "REFLECT->REPLAN"
                     reason = "post-intervention exact repeat during active reflect -> escalating to replan"
@@ -454,12 +460,16 @@ class StatefulController:
                 self.current_intervention_outcome = "unresolved"
                 self.unresolved_intervention_count += 1
                 escalated_type = self._apply_type_ablation(_ESCALATION[self.pending_intervention_type])
-                self.escalation_pending_type = escalated_type
-                self.escalation_reason = (
-                    f"{self.pending_intervention_type.value} intervention "
-                    f"#{self.current_intervention_id} unresolved after "
-                    f"{self.config.patch_duration_steps} steps -> escalating to {escalated_type.value}"
-                )
+                if escalated_type != InterventionType.CONTINUE:
+                    self.escalation_pending_type = escalated_type
+                    self.escalation_reason = (
+                        f"{self.pending_intervention_type.value} intervention "
+                        f"#{self.current_intervention_id} unresolved after "
+                        f"{self.config.patch_duration_steps} steps -> escalating to {escalated_type.value}"
+                    )
+                else:
+                    self.escalation_pending_type = None
+                    self.escalation_reason = None
             self.current_outcome_evaluation_step = self.step_index
             self.pending_intervention = False
             self.pending_intervention_type = None
@@ -584,14 +594,14 @@ class StatefulController:
         return record
 
     def _apply_type_ablation(self, intervention: InterventionType) -> InterventionType:
-        if intervention == InterventionType.CONTINUE:
-            return intervention
-        if self.ablation_mode == "reflect_only":
-            return InterventionType.REFLECT
-        if self.ablation_mode == "replan_only":
-            return InterventionType.REPLAN
-        if self.ablation_mode == "verify_only":
-            return InterventionType.VERIFY
+        """Keep only the selected intervention and its original trigger."""
+        enabled = {
+            "reflect_only": InterventionType.REFLECT,
+            "replan_only": InterventionType.REPLAN,
+            "verify_only": InterventionType.VERIFY,
+        }.get(self.ablation_mode)
+        if enabled is not None and intervention != enabled:
+            return InterventionType.CONTINUE
         return intervention
 
     def _random_intervention(self) -> InterventionType:
